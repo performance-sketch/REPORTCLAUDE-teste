@@ -1040,6 +1040,7 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
 </style>
 </head>
 <body>
+<div id="faixa-teste" style="position:sticky;top:0;z-index:9999;background:#f59e0b;color:#111;font:600 13px/1.4 system-ui,sans-serif;text-align:center;padding:8px 12px">🧪 AMBIENTE DE TESTES — cópia isolada do dashboard. Os dados aqui não se atualizam sozinhos. Versão oficial: <a href="https://performance-sketch.github.io/REPORTCLAUDE/" style="color:#111">performance-sketch.github.io/REPORTCLAUDE</a></div>
 
 <!-- HEADER -->
 <header class="border-b" style="border-color:var(--border);background:var(--surface)">

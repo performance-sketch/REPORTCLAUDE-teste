@@ -1,3 +1,7 @@
+
+## 🧪 Zona de testes
+
+Este repositório é uma **cópia isolada** do [REPORTCLAUDE](https://github.com/performance-sketch/REPORTCLAUDE) para testes. As automações estão desligadas (sem secrets), então os dados ficam congelados na data da cópia (08/10/2026). Versão oficial: https://performance-sketch.github.io/REPORTCLAUDE/
 # Marketing Dashboard — Meta Ads + Rezdy
 
 Dashboard de performance em tempo real integrando **Meta Ads** (investimento, campanhas, funil)
