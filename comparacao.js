@@ -212,6 +212,8 @@
           ${cartao('Receita líquida', a.liquida, b.liquida, brl0, 1, 'Receita bruta − cortesias (FOC) − cupons (PROMO_CODE) − estornos − comissão de marketplace')}
           ${cartao('Ticket médio / booking', a.ticket, b.ticket, brl)}
           ${cartao('Ticket médio / passageiro', a.ticketPax, b.ticketPax, brl)}
+          ${cartao('Ticket médio Online', tk(a, 'O'), tk(b, 'O'), brl, 1, `Reservas confirmadas Online — A: ${a.canal.O.bookings} · B: ${b.canal.O.bookings}`)}
+          ${cartao('Ticket médio Interno', tk(a, 'I'), tk(b, 'I'), brl, 1, `Reservas confirmadas Internas — A: ${a.canal.I.bookings} · B: ${b.canal.I.bookings}`)}
         </div>
         <div class="cmp-nt">Receita líquida = bruta − cortesias (FOC) − cupons − estornos − comissão de marketplace (GetYourGuide).</div></div>
 

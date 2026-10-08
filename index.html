@@ -146,6 +146,8 @@
     <div class="card"><div class="kpi-label">Confirmadas</div><div class="kpi-val" id="vg-conf">7288</div><div class="kpi-delta" id="vg-conf-sub">15659 total (46.50% conv.)</div></div>
     <div class="card"><div class="kpi-label">Ticket Médio</div><div class="kpi-val" id="vg-ticket">R$ 3.178,42</div><div class="kpi-delta" id="vg-ticket-delta"></div></div>
     <div class="card"><div class="kpi-label">CPA (Gasto÷Conf.)</div><div class="kpi-val" id="vg-cpa" style="color:var(--amber)">—</div><div class="kpi-delta" id="vg-cpa-delta"></div></div>
+    <div class="card"><div class="kpi-label">Ticket Médio Online</div><div class="kpi-val" id="vg-tk-online">—</div><div class="kpi-delta" id="vg-tk-online-delta"></div><div style="font-size:.68rem;color:var(--sub);margin-top:2px" id="vg-tk-online-sub"></div></div>
+    <div class="card"><div class="kpi-label">Ticket Médio Interno</div><div class="kpi-val" id="vg-tk-interno">—</div><div class="kpi-delta" id="vg-tk-interno-delta"></div><div style="font-size:.68rem;color:var(--sub);margin-top:2px" id="vg-tk-interno-sub"></div></div>
   </div>
 
   <!-- CUPONS -->
@@ -1315,6 +1317,17 @@ function applyDateRange(from, to, prev) {
   setText('vg-conf-sub', rTotal + ' total (' + fPct(rTaxa) + ' conv.)');
   setText('vg-ticket', fBRL(rTick));   setHtml('vg-ticket-delta', fDelta(rTick,  prTick,   1));
   setText('vg-cpa',    mCpa ? fBRL(mCpa) : '—'); setHtml('vg-cpa-delta', fDelta(mCpa, prCpa, -1));
+  // ── Ticket médio por canal (reservas confirmadas, pela data da reserva) ──
+  const _tkCanal = (de, ate, canal) => {
+    const l = BOOKINGS.filter(b => b.s === 'CONFIRMED' && b.f === canal && b.d >= de && b.d <= ate);
+    return { n: l.length, t: l.length ? l.reduce((s, b) => s + b.v, 0) / l.length : 0 };
+  };
+  [['online', 'ONLINE'], ['interno', 'INTERNAL']].forEach(([id, canal]) => {
+    const cur = _tkCanal(from, to, canal), ant = _tkCanal(pFrom, pTo, canal);
+    setText('vg-tk-' + id, cur.n ? fBRL(cur.t) : '—');
+    setHtml('vg-tk-' + id + '-delta', cur.n && ant.n ? fDelta(cur.t, ant.t, 1) : '');
+    setText('vg-tk-' + id + '-sub', cur.n + ' reserva' + (cur.n === 1 ? '' : 's') + (ant.n ? ' · antes: ' + fBRL(ant.t) : ''));
+  });
 
   // ── Update Funil ──
   setText('fn-impr',    fN(mImpr));
