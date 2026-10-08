@@ -30,6 +30,11 @@ jobs:
           REZDY_API_KEY: ${{ secrets.REZDY_API_KEY }}
         run: python scripts/update_rezdy_data.py
 
+      - name: Dados da Comparação Personalizada de Períodos (data/comparacao.json)
+        env:
+          REZDY_API_KEY: ${{ secrets.REZDY_API_KEY }}
+        run: python scripts/gerar_comparacao.py
+
       - name: Regenerate full dashboard (Meta Ads + Rezdy) — keeps every chart in sync
         env:
           META_TOKEN: ${{ secrets.META_TOKEN }}
@@ -41,8 +46,8 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git diff --quiet analise-rezdy-periodos.html data/periodos.json index.html || (
-            git add analise-rezdy-periodos.html data/periodos.json index.html &&
+          git diff --quiet analise-rezdy-periodos.html data/periodos.json data/comparacao.json index.html || (
+            git add analise-rezdy-periodos.html data/periodos.json data/comparacao.json index.html &&
             git commit -m "chore: auto-update Rezdy data [skip ci]" &&
             git push
           )

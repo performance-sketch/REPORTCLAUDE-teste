@@ -1243,7 +1243,7 @@ function buildBookingsFonte(from, to) {
 }
 
 // ─── Date range apply ─────────────────────────────────────────────────────────
-function applyDateRange(from, to) {
+function applyDateRange(from, to, prev) {
   currentFrom = from; currentTo = to;
 
   // ── Período atual ──
@@ -1267,12 +1267,13 @@ function applyDateRange(from, to) {
   const rTaxa  = rTotal ? rConf/rTotal*100 : 0;
   const mCpa   = rConf ? mGasto/rConf : 0;
 
-  // ── Período anterior (mesmo número de dias, imediatamente antes) ──
+  // ── Período de comparação: o informado pela Comparação Personalizada (prev) ou,
+  //    no padrão, o mesmo número de dias imediatamente antes ──
   const days = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
   const prevTo   = new Date(from + 'T12:00:00'); prevTo.setDate(prevTo.getDate()-1);
   const prevFrom = new Date(prevTo);             prevFrom.setDate(prevFrom.getDate()-days+1);
-  const pFrom = prevFrom.toISOString().slice(0,10);
-  const pTo   = prevTo.toISOString().slice(0,10);
+  const pFrom = prev ? prev.from : prevFrom.toISOString().slice(0,10);
+  const pTo   = prev ? prev.to   : prevTo.toISOString().slice(0,10);
 
   const pmDays  = META_DATA.diario.filter(d => d.data >= pFrom && d.data <= pTo);
   const pmGasto = pmDays.reduce((s,d)=>s+d.gasto,0);
@@ -1371,6 +1372,10 @@ function applyDateRange(from, to) {
   const fmtD = d => d.slice(8) + '-' + d.slice(5,7) + '-' + d.slice(0,4);
   setText('camps-title', 'Campanhas — ' + fmtD(from) + ' a ' + fmtD(to));
   renderCriativos(from, to);
+
+  // Avisa a Comparação de Períodos (comparacao.js) sobre o período em uso
+  window.__vrPeriodo = {from, to, pFrom, pTo, custom: !!prev};
+  window.dispatchEvent(new CustomEvent('vr:periodo', {detail: window.__vrPeriodo}));
 }
 
 // ─── Render dinâmico de campanhas, produtos e bookings ───────────────────────
@@ -2229,7 +2234,7 @@ function toggleCard(bodyId, btnId) {
 }
 
 flatpickr.localize(flatpickr.l10ns.pt);
-flatpickr("#date-range", {
+window.__vrFp = flatpickr("#date-range", {
   mode: "range",
   dateFormat: "Y-m-d",
   altInput: true,
@@ -2536,5 +2541,6 @@ function vrCopyAnnotationMsg(evt) {
   if (countEl) countEl.textContent = ANNOTATIONS_ALL.length || '';
 })();
 </script>
+<script src="comparacao.js"></script>
 </body>
 </html>
