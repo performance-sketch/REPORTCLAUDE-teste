@@ -91,7 +91,7 @@
     const r = {pedidos: venda.length, status: {C: 0, A: 0, X: 0, H: 0, O: 0}, canal: {}, gateway: {}, naoRec: {FREE: 0, PROMO_CODE: 0, REFUND: 0},
       bookings: conf.length, pax: 0, bruta: 0, comissao: 0, foc: 0, focBookings: 0, focTotal: 0,
       extras: {}, comExtra: 0, servicos: {noshow: [0, 0], fee: [0, 0], gift: [0, 0], outro: [0, 0]}};
-    Object.keys(CANAIS).forEach(c => { r.canal[c] = {pedidos: 0, abandonos: 0, bookings: 0, receita: 0, pax: 0}; });
+    Object.keys(CANAIS).forEach(c => { r.canal[c] = {pedidos: 0, abandonos: 0, bookings: 0, receita: 0, pax: 0, foc: 0, focBookings: 0, focTotal: 0}; });
     venda.forEach(x => {
       r.status[x[2]] = (r.status[x[2]] || 0) + 1;
       const c = r.canal[x[3]]; if (!c) return;
@@ -120,7 +120,11 @@
         if (NAO_RECEBIDO.includes(t)) r.naoRec[t] += val;
         else { r.gateway[t] = (r.gateway[t] || 0) + val; recebido += val; }
       });
-      if (pag && pag.FREE) { r.focBookings++; if (recebido < 0.01 && !pag.PROMO_CODE) r.focTotal++; }
+      if (pag && pag.FREE) {
+        const total = recebido < 0.01 && !pag.PROMO_CODE;     // reserva 100% cortesia
+        r.focBookings++; if (total) r.focTotal++;
+        if (r.canal[c]) { r.canal[c].foc += pag.FREE; r.canal[c].focBookings++; if (total) r.canal[c].focTotal++; }
+      }
     });
     r.foc = r.naoRec.FREE;
     r.liquida = r.bruta - r.naoRec.FREE - r.naoRec.PROMO_CODE - r.naoRec.REFUND - r.comissao;
@@ -170,6 +174,10 @@
       out.push(`O PayPal passou de ${pct((a.gateway.PAYPAL || 0) / gA * 100)} para ${pct((b.gateway.PAYPAL || 0) / gB * 100)} dos valores recebidos.`);
     if (a.bruta && b.bruta && Math.abs(b.foc / b.bruta - a.foc / a.bruta) * 100 >= 1)
       out.push(`As cortesias (FOC) representaram ${pct(a.foc / a.bruta * 100)} da receita bruta em A e ${pct(b.foc / b.bruta * 100)} em B.`);
+    if (b.foc > 0) {
+      const top = Object.keys(CANAIS).sort((x, y) => b.canal[y].foc - b.canal[x].foc)[0], cb = b.canal[top];
+      out.push(`O canal <b>${CANAIS[top]}</b> concentra ${pct(cb.foc / b.foc * 100)} das cortesias de B (${brl0(cb.foc)}, ${pct(cb.receita ? cb.foc / cb.receita * 100 : 0)} da receita do canal).`);
+    }
     if (ef.B.andamento && !S.prop)
       out.push(`⚠ B ainda está em andamento (${ef.B.dias} de ${ef.B.total} dias). Para comparar dias equivalentes, use a comparação proporcional.`);
     return out;
@@ -269,6 +277,15 @@
           linha('Cupons de desconto (PROMO_CODE)', a.naoRec.PROMO_CODE, b.naoRec.PROMO_CODE, brl0, -1) +
           linha('Estornos', a.naoRec.REFUND, b.naoRec.REFUND, brl0, -1),
           'FOC = pagamentos do tipo FREE no Rezdy (ex.: "Cortesia GoPro").')}
+        ${tabela('Free of Charge (FOC) por canal', Object.keys(CANAIS).filter(c => a.canal[c].bookings || b.canal[c].bookings).map(c => {
+          const fa = a.canal[c], fb = b.canal[c];
+          return linha(`${CANAIS[c]} · cortesias (FOC)`, fa.foc, fb.foc, brl0, -1) +
+            linha('↳ % da receita do canal', fa.receita ? fa.foc / fa.receita * 100 : null, fb.receita ? fb.foc / fb.receita * 100 : null, x => pct(x), -1, true) +
+            linha('↳ reservas com alguma cortesia', fa.focBookings, fb.focBookings, x => num(x), 0) +
+            linha('↳ % das reservas do canal', fa.bookings ? fa.focBookings / fa.bookings * 100 : null, fb.bookings ? fb.focBookings / fb.bookings * 100 : null, x => pct(x), -1, true) +
+            linha('↳ reservas 100% cortesia', fa.focTotal, fb.focTotal, x => num(x), 0) +
+            linha('↳ participação no FOC total', a.foc ? fa.foc / a.foc * 100 : null, b.foc ? fb.foc / b.foc * 100 : null, x => pct(x), 0, true);
+        }).join(''), 'Cortesias somadas pela data da reserva. "% da receita do canal" = FOC do canal ÷ receita bruta do canal.')}
         ${tabela('Fees e outros itens', [['noshow', 'No-Show Fees'], ['fee', 'Outras fees'], ['gift', 'Gift Cards'], ['outro', 'Outros serviços (ex.: shuttle)']]
           .filter(([k]) => a.servicos[k][0] || b.servicos[k][0]).map(([k, l]) =>
             linha(`${l} · quantidade`, a.servicos[k][0], b.servicos[k][0], x => num(x), 0) + linha(`${l} · receita`, a.servicos[k][1], b.servicos[k][1], brl0, 0)).join('') || '<tr><td colspan="4">Nenhum no período.</td></tr>')}
