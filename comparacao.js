@@ -16,7 +16,9 @@
   const STATUS = {C: 'Confirmados', A: 'Abandonados', X: 'Cancelados', H: 'On Hold', O: 'Outros'};
   const GATEWAYS = {PAYPAL: 'PayPal', CREDITCARD: 'Cartão de crédito', BANKTRANSFER: 'Transferência', CASH: 'Dinheiro', VOUCHER: 'Voucher', OTHER: 'Outros', EXTERNAL: 'Externo (marketplace)'};
   const NAO_RECEBIDO = ['FREE', 'PROMO_CODE', 'REFUND'];     // cortesia (FOC), cupom e estorno: não são recebimento
-  const S = {modo: 'padrao', preset: 'ciclo', prop: false, A: null, B: null, dados: null, carregando: null, aplicado: null};
+  const S = {modo: 'padrao', preset: 'ciclo', prop: false, A: null, B: null, dados: null, carregando: null, aplicado: null, min: false};
+  const MIN_KEY = 'vr_cmp_minimizado';
+  try { S.min = localStorage.getItem(MIN_KEY) === '1'; } catch (_) {}
 
   // ─── Datas e ciclos (26 de um mês a 25 do seguinte) ────────────────────────
   const pad = n => String(n).padStart(2, '0');
@@ -283,6 +285,10 @@
       const p = window.__vrPeriodo;
       bar.innerHTML = p ? `<b>Comparação padrão:</b> ${br(p.from)}–${br(p.to)} <span class="cmp-x">×</span> ${br(p.pFrom)}–${br(p.pTo)} <span class="cmp-meta">(mesmo nº de dias, imediatamente antes)</span>` : '';
     }
+    // Minimizar: esconde o seletor e o painel de resultados; a barra com os períodos continua visível
+    if (bar.innerHTML) bar.insertAdjacentHTML('beforeend', `<button type="button" class="cmp-min" data-minimizar aria-expanded="${!S.min}" title="${S.min ? 'Mostrar o seletor e o painel da comparação' : 'Esconder o seletor e o painel da comparação'}">${S.min ? '▼ Expandir' : '▲ Minimizar'}</button>`);
+    document.getElementById('cmp-ctl').hidden = S.min;
+    document.getElementById('cmp-res').hidden = S.min;
   }
 
   function renderControles() {
@@ -352,6 +358,9 @@
       #cmp{max-width:1280px;margin:0 auto;padding:4px 24px 0}
       #cmp-bar{position:sticky;z-index:40;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 14px;font-size:.78rem;color:var(--text);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-bottom:10px;box-shadow:0 6px 16px rgba(0,0,0,.25)}
       #cmp-bar:empty{display:none}
+      .cmp-min{margin-left:auto;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:4px 10px;font-size:.72rem;font-weight:600;cursor:pointer;white-space:nowrap}
+      .cmp-min:hover{border-color:var(--indigo)}
+      #cmp [hidden]{display:none!important}
       .cmp-meta{color:var(--sub);font-size:.72rem} .cmp-x{color:var(--sub)}
       .cmp-tag{display:inline-block;font-size:.66rem;font-weight:800;border-radius:5px;padding:1px 6px;color:#0f172a}
       .cmp-tag.a{background:#94a3b8} .cmp-tag.b{background:var(--cyan)}
@@ -402,6 +411,11 @@
     root.addEventListener('click', e => {
       const t = e.target.closest('button'); if (!t) return;
       const d = t.dataset;
+      if ('minimizar' in d) {
+        S.min = !S.min;
+        try { localStorage.setItem(MIN_KEY, S.min ? '1' : '0'); } catch (_) {}
+        return renderBarra();
+      }
       if (d.modo) { if (d.modo === 'padrao') return restaurar(); S.modo = 'personalizada'; if (!S.A) usarPreset('ciclo'); render(); }
       else if (d.prop) { S.prop = d.prop === '1'; if (S.aplicado) aplicar(); else render(); }
       else if (d.preset) { usarPreset(d.preset); render(); if (d.preset !== 'personalizado') aplicar(); }
