@@ -184,15 +184,20 @@
   }
 
   // ─── Render ────────────────────────────────────────────────────────────────
+  // Datas efetivamente usadas em cada período, no formato dd/mm/aa – dd/mm/aa
+  const dataAno = s => `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(2, 4)}`;
+  const datasDe = P => P ? `${dataAno(P.ini)} – ${dataAno(P.fimEf)}` : '';
   function cartao(rotulo, a, b, fmt, bom = 1, dica = '') {
+    const {A, B} = S.aplicado || {};
     return `<div class="cmp-k"${dica ? ` title="${esc(dica)}"` : ''}><div class="cmp-kl">${rotulo}</div>
-      <div class="cmp-kv">${b == null ? '—' : fmt(b)}</div><div class="cmp-ka">A: ${a == null ? '—' : fmt(a)}</div>${variacao(a, b, fmt, bom)}</div>`;
+      <div class="cmp-kv">${b == null ? '—' : fmt(b)}</div><div class="cmp-kd">B · ${datasDe(B)}</div>
+      <div class="cmp-ka">A · ${datasDe(A)}: <b>${a == null ? '—' : fmt(a)}</b></div>${variacao(a, b, fmt, bom)}</div>`;
   }
   function linha(rotulo, a, b, fmt, bom = 1, pp = false) {
     return `<tr><td>${rotulo}</td><td class="r">${a == null ? '—' : fmt(a)}</td><td class="r">${b == null ? '—' : fmt(b)}</td><td class="r">${variacao(a, b, fmt, bom, pp)}</td></tr>`;
   }
   const tabela = (titulo, linhas, nota = '') => `<div class="cmp-tb"><div class="cmp-tt">${titulo}</div><div class="cmp-sc"><table>
-    <thead><tr><th></th><th class="r">A · base</th><th class="r">B · comparado</th><th class="r">Variação (B vs A)</th></tr></thead><tbody>${linhas}</tbody></table></div>${nota ? `<div class="cmp-nt">${nota}</div>` : ''}</div>`;
+    <thead><tr><th></th><th class="r"><span class="cmp-tag a">A</span> ${datasDe(S.aplicado && S.aplicado.A)}</th><th class="r"><span class="cmp-tag b">B</span> ${datasDe(S.aplicado && S.aplicado.B)}</th><th class="r">Variação (B vs A)</th></tr></thead><tbody>${linhas}</tbody></table></div>${nota ? `<div class="cmp-nt">${nota}</div>` : ''}</div>`;
 
   function renderResultado() {
     const box = document.getElementById('cmp-res');
@@ -406,12 +411,14 @@
       .cmp-k{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
       .cmp-kl{font-size:.66rem;color:var(--sub);text-transform:uppercase;letter-spacing:.05em}
       .cmp-kv{font-size:1.25rem;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+      .cmp-kd{font-size:.64rem;color:var(--cyan);margin-top:1px;font-variant-numeric:tabular-nums}
       .cmp-ka{font-size:.72rem;color:var(--sub);margin-top:2px;font-variant-numeric:tabular-nums}
+      .cmp-ka b{color:var(--text);font-weight:600;white-space:nowrap}
       .cmp-d{display:inline-block;font-size:.72rem;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
       .cmp-d.pos{color:var(--green)} .cmp-d.neg{color:var(--red)} .cmp-d.neu{color:var(--cyan)} .cmp-d.nul{color:var(--sub)}
       .cmp-tb{margin-top:10px} .cmp-tt{font-size:.78rem;font-weight:600;color:var(--sub);margin-bottom:6px}
       .cmp-sc{overflow-x:auto} .cmp-tb table{width:100%;border-collapse:collapse;font-size:.78rem}
-      .cmp-tb th{font-size:.66rem;color:var(--sub);text-transform:uppercase;letter-spacing:.04em;font-weight:600;padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+      .cmp-tb th{font-size:.68rem;color:var(--sub);letter-spacing:.02em;font-weight:600;padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
       .cmp-tb td{padding:6px 8px;border-bottom:1px solid rgba(51,65,85,.5);font-variant-numeric:tabular-nums;white-space:nowrap}
       .cmp-tb .r{text-align:right} .cmp-tb .cmp-d{margin:0}
       .cmp-nt{font-size:.7rem;color:var(--sub);margin-top:6px;line-height:1.5}
