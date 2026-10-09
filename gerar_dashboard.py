@@ -1081,7 +1081,6 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
       <button class="tab-btn" onclick="switchTab('meta',this)">Meta Ads</button>
       <button class="tab-btn" onclick="switchTab('rezdy',this)">Rezdy Bookings</button>
       <button class="tab-btn" onclick="switchTab('organico',this)">Meta Orgânico</button>
-      <button class="tab-btn" onclick="switchTab('calendario',this)">Calendário de Voos</button>
     </div>
     <!-- Date range picker global -->
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -1702,11 +1701,6 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
 
 </div><!-- /tab-organico -->
 
-<!-- ═══════════════════════════ CALENDÁRIO DE VOOS ═══════════════════════ -->
-<div id="tab-calendario" class="tab-content pt-3" style="display:none">
-  <div id="cal-root"></div>
-</div><!-- /tab-calendario -->
-
 
 </main>
 
@@ -1792,7 +1786,6 @@ function switchTab(tab, btn) {{
   document.getElementById('tab-' + tab).style.display = 'block';
   if (btn) btn.classList.add('active');
   if (tab === 'organico' && !_igInited) {{ initInstagram(); _igInited = true; }}
-  if (tab === 'calendario' && window.VRCalendario) VRCalendario.montar();
 }}
 
 // ─── Chart registry ───────────────────────────────────────────────────────────
@@ -3489,7 +3482,6 @@ function vrCopyAnnotationMsg(evt) {{
 }})();
 </script>
 <script src="comparacao.js"></script>
-<script src="calendario.js"></script>
 </body>
 </html>"""
     return html

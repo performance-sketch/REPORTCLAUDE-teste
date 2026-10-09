@@ -35,12 +35,6 @@ jobs:
           REZDY_API_KEY: ${{ secrets.REZDY_API_KEY }}
         run: python scripts/gerar_comparacao.py
 
-      - name: Dados do Calendário de Voos (data/slots.json)
-        continue-on-error: true   # falha aqui não impede a atualização do dashboard
-        env:
-          REZDY_API_KEY: ${{ secrets.REZDY_API_KEY }}
-        run: python scripts/gerar_slots.py
-
       - name: Regenerate full dashboard (Meta Ads + Rezdy) — keeps every chart in sync
         env:
           META_TOKEN: ${{ secrets.META_TOKEN }}
@@ -52,9 +46,8 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add analise-rezdy-periodos.html data/periodos.json data/comparacao.json index.html
-          if [ -f data/slots.json ]; then git add data/slots.json; fi
-          git diff --cached --quiet || (
+          git diff --quiet analise-rezdy-periodos.html data/periodos.json data/comparacao.json index.html || (
+            git add analise-rezdy-periodos.html data/periodos.json data/comparacao.json index.html &&
             git commit -m "chore: auto-update Rezdy data [skip ci]" &&
             git push
           )
