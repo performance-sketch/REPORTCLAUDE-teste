@@ -1,0 +1,38 @@
+name: Update Calendário de Voos (slots)
+
+on:
+  workflow_dispatch:
+    # Só gera data/slots.json — não regenera o resto do dashboard
+
+jobs:
+  slots:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to push data/slots.json
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Dados do Calendário de Voos (data/slots.json)
+        env:
+          REZDY_API_KEY: ${{ secrets.REZDY_API_KEY }}
+        run: python scripts/gerar_slots.py
+
+      - name: Commit and push if data changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/slots.json
+          git diff --cached --quiet || (
+            git commit -m "chore: atualiza slots do Calendário de Voos [skip ci]" &&
+            git push
+          )
