@@ -983,6 +983,16 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
     --red:#ef4444; --cyan:#06b6d4;
   }}
   body {{ background:var(--bg); color:var(--text); font-family:'Inter',system-ui,sans-serif; }}
+  .vg-canais-grid {{ display:grid; grid-template-columns:240px 1fr; gap:24px; align-items:center; }}
+  @media (max-width:760px) {{ .vg-canais-grid {{ grid-template-columns:1fr; }} }}
+  .vg-canal-met {{ background:none; border:0; color:var(--sub); font-size:.78rem; font-weight:600; padding:5px 12px; border-radius:7px; cursor:pointer; }}
+  .vg-canal-met.on {{ background:var(--indigo); color:#fff; }}
+  .vg-canais-tb {{ width:100%; border-collapse:collapse; font-size:.82rem; }}
+  .vg-canais-tb th {{ font-size:.68rem; color:var(--sub); font-weight:600; text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); white-space:nowrap; }}
+  .vg-canais-tb td {{ padding:8px; border-bottom:1px solid rgba(51,65,85,.5); font-variant-numeric:tabular-nums; white-space:nowrap; }}
+  .vg-canais-tb .r {{ text-align:right; }}
+  .vg-canais-tb tr.tot td {{ font-weight:700; border-bottom:0; }}
+  .vg-canal-sw {{ display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:8px; vertical-align:-1px; }}
   .card {{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; }}
   .kpi-val {{ font-size:1.75rem; font-weight:700; line-height:1.1; }}
   .kpi-label {{ font-size:0.72rem; color:var(--sub); text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px; }}
@@ -1113,6 +1123,33 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
     <div class="card"><div class="kpi-label">CPA (Gasto÷Conf.)</div><div class="kpi-val" id="vg-cpa" style="color:var(--amber)">—</div><div class="kpi-delta" id="vg-cpa-delta"></div></div>
     <div class="card"><div class="kpi-label">Ticket Médio Online</div><div class="kpi-val" id="vg-tk-online">—</div><div class="kpi-delta" id="vg-tk-online-delta"></div><div style="font-size:.68rem;color:var(--sub);margin-top:2px" id="vg-tk-online-sub"></div></div>
     <div class="card"><div class="kpi-label">Ticket Médio Interno</div><div class="kpi-val" id="vg-tk-interno">—</div><div class="kpi-delta" id="vg-tk-interno-delta"></div><div style="font-size:.68rem;color:var(--sub);margin-top:2px" id="vg-tk-interno-sub"></div></div>
+  </div>
+
+  <!-- VENDAS POR CANAL -->
+  <div class="mb-2" style="font-size:.7rem;color:var(--sub);text-transform:uppercase;letter-spacing:.08em">Vendas por canal</div>
+  <div class="card mb-6" id="vg-canais">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px">
+      <div style="font-weight:600;font-size:.9rem">Online × Interno × GYG (Negotiated Rate) <span style="font-weight:400;color:var(--sub);font-size:.75rem">· reservas confirmadas pela data da reserva, no período selecionado</span></div>
+      <div style="display:inline-flex;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:3px;gap:3px">
+        <button type="button" class="vg-canal-met" data-met="receita" onclick="setCanalMetrica('receita')">Receita</button>
+        <button type="button" class="vg-canal-met" data-met="reservas" onclick="setCanalMetrica('reservas')">Reservas</button>
+      </div>
+    </div>
+    <div class="vg-canais-grid">
+      <div style="position:relative;width:220px;height:220px;margin:0 auto">
+        <canvas id="chartCanais" style="position:relative;z-index:1" role="img" aria-label="Gráfico de rosca: vendas por canal"></canvas>
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;z-index:0">
+          <div id="vg-canais-total" style="font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums">—</div>
+          <div id="vg-canais-total-lbl" style="font-size:.68rem;color:var(--sub);margin-top:2px">receita total</div>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="vg-canais-tb">
+          <thead><tr><th>Canal</th><th class="r">Receita</th><th class="r">% receita</th><th class="r">Reservas</th><th class="r">% reservas</th><th class="r">Ticket médio</th></tr></thead>
+          <tbody id="vg-canais-body"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- CUPONS -->
@@ -1997,6 +2034,74 @@ function buildBookingsFonte(from, to) {{
   }});
 }}
 
+// ─── Vendas por canal (rosca) — Online × Interno × GYG (Negotiated Rate) ──────
+// Cores validadas para daltonismo (validador de paleta, superfície escura).
+const CANAIS_VG = [
+  {{ id:'online',  nome:'Online',                cor:'#6366f1' }},
+  {{ id:'interno', nome:'Interno',               cor:'#16a34a' }},
+  {{ id:'gyg',     nome:'GYG (Negotiated Rate)', cor:'#ec4899' }},
+  {{ id:'outros',  nome:'Outros',                cor:'#64748b' }},
+];
+let _canalMetrica = 'receita';
+function _canalDe(b) {{
+  const f = (b.f || '').toUpperCase();
+  if (f === 'MARKETPLACE_PREF_RATE' || /GYG/i.test(b.p || '')) return 'gyg';
+  if (f === 'ONLINE') return 'online';
+  if (f === 'INTERNAL') return 'interno';
+  return 'outros';
+}}
+function setCanalMetrica(m) {{
+  _canalMetrica = m;
+  renderCanais(currentFrom, currentTo);
+}}
+function renderCanais(from, to) {{
+  const agg = {{}};
+  CANAIS_VG.forEach(c => agg[c.id] = {{ receita:0, reservas:0 }});
+  for (const b of BOOKINGS) {{
+    if (b.s !== 'CONFIRMED' || b.d < from || b.d > to) continue;
+    const a = agg[_canalDe(b)];
+    a.receita += b.v || 0; a.reservas++;
+  }}
+  const lista = CANAIS_VG.filter(c => c.id !== 'outros' || agg.outros.reservas);
+  const totRec = lista.reduce((s, c) => s + agg[c.id].receita, 0);
+  const totRes = lista.reduce((s, c) => s + agg[c.id].reservas, 0);
+  const met = _canalMetrica;
+  const pct = (v, t) => t ? (v / t * 100).toFixed(1).replace('.', ',') + '%' : '—';
+  document.querySelectorAll('.vg-canal-met').forEach(b => b.classList.toggle('on', b.dataset.met === met));
+  setText('vg-canais-total', met === 'receita' ? fBRL(totRec) : fN(totRes));
+  setText('vg-canais-total-lbl', met === 'receita' ? 'receita total' : 'reservas confirmadas');
+  const body = document.getElementById('vg-canais-body');
+  if (body) {{
+    body.innerHTML = lista.map(c => {{
+      const a = agg[c.id];
+      return `<tr><td><span class="vg-canal-sw" style="background:${{c.cor}}"></span>${{c.nome}}</td>`
+        + `<td class="r">${{fBRL(a.receita)}}</td><td class="r">${{pct(a.receita, totRec)}}</td>`
+        + `<td class="r">${{fN(a.reservas)}}</td><td class="r">${{pct(a.reservas, totRes)}}</td>`
+        + `<td class="r">${{a.reservas ? fBRL(a.receita / a.reservas) : '—'}}</td></tr>`;
+    }}).join('') + `<tr class="tot"><td>Total</td><td class="r">${{fBRL(totRec)}}</td><td class="r">100%</td>`
+      + `<td class="r">${{fN(totRes)}}</td><td class="r">100%</td><td class="r">${{totRes ? fBRL(totRec / totRes) : '—'}}</td></tr>`;
+  }}
+  const tot = met === 'receita' ? totRec : totRes;
+  makeChart('chartCanais', {{
+    type: 'doughnut',
+    data: {{
+      labels: lista.map(c => c.nome),
+      datasets: [{{ data: lista.map(c => agg[c.id][met]), backgroundColor: lista.map(c => c.cor),
+                   borderColor: '#1e293b', borderWidth: 2, hoverOffset: 4 }}]
+    }},
+    options: {{
+      responsive: true, maintainAspectRatio: false, cutout: '68%',
+      plugins: {{
+        legend: {{ display: false }},
+        tooltip: {{ callbacks: {{ label: ctx => {{
+          const v = ctx.parsed;
+          return ` ${{met === 'receita' ? fBRL(v) : fN(v) + ' reservas'}} (${{pct(v, tot)}})`;
+        }} }} }}
+      }}
+    }}
+  }});
+}}
+
 // ─── Date range apply ─────────────────────────────────────────────────────────
 function applyDateRange(from, to, prev) {{
   currentFrom = from; currentTo = to;
@@ -2081,6 +2186,8 @@ function applyDateRange(from, to, prev) {{
     setHtml('vg-tk-' + id + '-delta', cur.n && ant.n ? fDelta(cur.t, ant.t, 1) : '');
     setText('vg-tk-' + id + '-sub', cur.n + ' reserva' + (cur.n === 1 ? '' : 's') + (ant.n ? ' · antes: ' + fBRL(ant.t) : ''));
   }});
+
+  renderCanais(from, to);
 
   // ── Update Funil ──
   setText('fn-impr',    fN(mImpr));
