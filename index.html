@@ -17,6 +17,14 @@
     --red:#ef4444; --cyan:#06b6d4;
   }
   body { background:var(--bg); color:var(--text); font-family:'Inter',system-ui,sans-serif; }
+  .vg-pag-tb { width:100%; border-collapse:collapse; font-size:.82rem; min-width:560px; }
+  .vg-pag-tb th { font-size:.68rem; color:var(--sub); font-weight:600; text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .vg-pag-tb td { padding:8px; border-bottom:1px solid rgba(51,65,85,.5); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .vg-pag-tb .r { text-align:right; }
+  .vg-pag-tb tr.tot td { font-weight:700; border-bottom:0; }
+  .vg-pag-tr { height:10px; background:rgba(148,163,184,.08); border-radius:4px; }
+  .vg-pag-br { height:10px; background:#6366f1; border-radius:0 4px 4px 0; min-width:2px; }
+  .vg-pag-tb tbody tr:hover td { background:rgba(99,102,241,.06); }
   .vg-canais-grid { display:grid; grid-template-columns:240px 1fr; gap:24px; align-items:center; }
   @media (max-width:760px) { .vg-canais-grid { grid-template-columns:1fr; } }
   .vg-canal-met { background:none; border:0; color:var(--sub); font-size:.78rem; font-weight:600; padding:5px 12px; border-radius:7px; cursor:pointer; }
@@ -184,6 +192,19 @@
         </table>
       </div>
     </div>
+  </div>
+
+  <!-- VALORES RECEBIDOS POR MEIO DE PAGAMENTO -->
+  <div class="mb-2" style="font-size:.7rem;color:var(--sub);text-transform:uppercase;letter-spacing:.08em">Valores recebidos por meio de pagamento</div>
+  <div class="card mb-6" id="vg-pag">
+    <div style="font-weight:600;font-size:.9rem;margin-bottom:14px">Recebido por gateway <span style="font-weight:400;color:var(--sub);font-size:.75rem">· pagamentos das reservas confirmadas no período selecionado (pela data da reserva)</span></div>
+    <div style="overflow-x:auto">
+      <table class="vg-pag-tb">
+        <thead><tr><th>Meio de pagamento</th><th style="width:40%"></th><th class="r">Valor recebido</th><th class="r">% do recebido</th><th class="r">Pedidos</th></tr></thead>
+        <tbody id="vg-pag-body"><tr><td colspan="5" style="color:var(--sub)">Carregando pagamentos…</td></tr></tbody>
+      </table>
+    </div>
+    <div id="vg-pag-nao" style="font-size:.74rem;color:var(--sub);margin-top:12px;line-height:1.6"></div>
   </div>
 
   <!-- CUPONS -->
@@ -1175,6 +1196,48 @@ function renderCanais(from, to) {
   });
 }
 
+// ─── Valores recebidos por meio de pagamento (gateways do Rezdy) ─────────────
+// Dados: data/comparacao.json (pagamentos de cada reserva confirmada, por tipo).
+// FREE (cortesia/FOC), PROMO_CODE (cupom) e REFUND (estorno) não são recebimento.
+const GATEWAYS_VG = { PAYPAL:'PayPal', CREDITCARD:'Cartão de crédito', BANKTRANSFER:'Transferência bancária',
+  CASH:'Dinheiro', VOUCHER:'Voucher', EXTERNAL:'Externo (marketplace)', OTHER:'Outros' };
+const NAO_RECEBIDO_VG = { FREE:'Cortesia (FOC)', PROMO_CODE:'Cupom de desconto', REFUND:'Estornos' };
+let _pagDados = null, _pagCarregando = null;
+function renderPagamentos(from, to) {
+  if (!_pagDados) {
+    _pagCarregando ||= fetch('data/comparacao.json?v=' + (typeof HOJE === 'string' ? HOJE : Date.now()), { cache:'no-cache' })
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(j => { _pagDados = j; renderPagamentos(currentFrom, currentTo); })
+      .catch(() => { const b = document.getElementById('vg-pag-body');
+        if (b) b.innerHTML = '<tr><td colspan="5" style="color:var(--sub)">Não foi possível carregar os pagamentos.</td></tr>'; });
+    return;
+  }
+  const rec = {}, ped = {}, nao = {};
+  for (const b of _pagDados.b) {
+    if (b[2] !== 'C' || b[1] < from || b[1] > to || !b[6]) continue;
+    for (const [tipo, valor] of Object.entries(b[6])) {
+      if (NAO_RECEBIDO_VG[tipo]) { nao[tipo] = (nao[tipo] || 0) + valor; continue; }
+      const g = GATEWAYS_VG[tipo] ? tipo : 'OTHER';
+      rec[g] = (rec[g] || 0) + valor; ped[g] = (ped[g] || 0) + 1;
+    }
+  }
+  const lista = Object.keys(rec).sort((a, b) => rec[b] - rec[a]);
+  const total = lista.reduce((s, g) => s + rec[g], 0);
+  const max = lista.length ? rec[lista[0]] : 0;
+  const pct = v => total ? (v / total * 100).toFixed(1).replace('.', ',') + '%' : '—';
+  const body = document.getElementById('vg-pag-body');
+  if (!body) return;
+  body.innerHTML = !lista.length
+    ? '<tr><td colspan="5" style="color:var(--sub)">Nenhum pagamento no período.</td></tr>'
+    : lista.map(g => `<tr title="${GATEWAYS_VG[g]}: ${fBRL(rec[g])} (${pct(rec[g])}) em ${fN(ped[g])} pedidos">`
+        + `<td>${GATEWAYS_VG[g]}</td>`
+        + `<td><div class="vg-pag-tr"><div class="vg-pag-br" style="width:${(rec[g] / max * 100).toFixed(1)}%"></div></div></td>`
+        + `<td class="r">${fBRL(rec[g])}</td><td class="r">${pct(rec[g])}</td><td class="r">${fN(ped[g])}</td></tr>`).join('')
+      + `<tr class="tot"><td>Total recebido</td><td></td><td class="r">${fBRL(total)}</td><td class="r">100%</td><td></td></tr>`;
+  const partes = Object.keys(NAO_RECEBIDO_VG).filter(t => nao[t]).map(t => `${NAO_RECEBIDO_VG[t]}: <b style="color:var(--text)">${fBRL(nao[t])}</b>`);
+  setHtml('vg-pag-nao', partes.length ? 'Não entram no recebido · ' + partes.join(' · ') : '');
+}
+
 // ─── Date range apply ─────────────────────────────────────────────────────────
 function applyDateRange(from, to, prev) {
   currentFrom = from; currentTo = to;
@@ -1261,6 +1324,7 @@ function applyDateRange(from, to, prev) {
   });
 
   renderCanais(from, to);
+  renderPagamentos(from, to);
 
   // ── Update Funil ──
   setText('fn-impr',    fN(mImpr));
