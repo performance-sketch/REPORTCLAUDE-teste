@@ -1029,6 +1029,9 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
   .date-range-wrap {{ position:relative; display:flex; align-items:center; gap:8px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:8px 14px; cursor:pointer; transition:border-color .15s; min-width:280px; }}
   .date-range-wrap:hover {{ border-color:var(--indigo); }}
   .date-range-wrap input {{ background:transparent; border:none; outline:none; color:var(--text); font-size:.875rem; width:100%; cursor:pointer; }}
+  .dn-sel {{ background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:7px 10px; font-size:.8rem; cursor:pointer; outline:none; }}
+  .dn-sel:hover, .dn-sel:focus {{ border-color:var(--indigo); }}
+  .dn-btn {{ padding:6px 11px !important; font-size:.8rem !important; }}
   ::-webkit-scrollbar {{ width:6px; height:6px; }}
   ::-webkit-scrollbar-track {{ background:var(--bg); }}
   ::-webkit-scrollbar-thumb {{ background:var(--border); border-radius:3px; }}
@@ -1104,6 +1107,34 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       <div class="date-range-wrap">
         <input type="text" id="date-range" placeholder="Selecione o período" readonly>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <button class="tab-btn dn-btn" onclick="shiftRange(-1)" title="Período anterior">◀</button>
+        <button class="tab-btn dn-btn" onclick="shiftRange(1)" title="Próximo período">▶</button>
+        <select id="range-preset" class="dn-sel" onchange="applyPreset(this.value)" title="Atalhos de período">
+          <option value="">Atalhos…</option>
+          <optgroup label="Passado">
+            <option value="7d">Últimos 7 dias</option>
+            <option value="30d">Últimos 30 dias</option>
+            <option value="90d">Últimos 90 dias</option>
+            <option value="mes-ant">Mês anterior</option>
+            <option value="ciclo-ant">Ciclo anterior (26→25)</option>
+          </optgroup>
+          <optgroup label="Atual">
+            <option value="mes-atual">Mês atual</option>
+            <option value="ciclo-atual">Ciclo atual (26→25)</option>
+            <option value="ano-atual">Ano atual</option>
+          </optgroup>
+          <optgroup label="Futuro (voos agendados)">
+            <option value="prox-30">Próximos 30 dias</option>
+            <option value="prox-90">Próximos 90 dias</option>
+            <option value="mes-prox">Próximo mês</option>
+            <option value="ciclo-prox">Próximo ciclo (26→25)</option>
+            <option value="futuro">Todos os voos futuros</option>
+          </optgroup>
+          <option value="tudo">Todo o período com dados</option>
+        </select>
+        <select id="range-mes" class="dn-sel" onchange="applyMes(this.value)" title="Ir para um mês"></select>
       </div>
       <div id="range-label" style="font-size:.78rem;color:var(--sub);white-space:nowrap"></div>
     </div>
@@ -1300,6 +1331,31 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
 
 <!-- ═══════════════════════════ REZDY ════════════════════════════════════ -->
 <div id="tab-rezdy" class="tab-content pt-3" style="display:none">
+
+  <!-- Agenda de voos: reservas confirmadas pela data do voo (inclui datas futuras) -->
+  <div class="card mb-5" id="agenda-voos">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <div>
+        <div style="font-weight:600;font-size:.9rem">✈️ Agenda de voos <span style="color:var(--sub);font-weight:400">· reservas confirmadas pela data do voo</span></div>
+        <div id="av-sub" style="font-size:.75rem;color:var(--sub);margin-top:2px"></div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button onclick="setAgendaView('auto')"   id="av-btn-auto"   class="tab-btn active" style="padding:3px 10px;font-size:.72rem">Auto</button>
+        <button onclick="setAgendaView('dia')"    id="av-btn-dia"    class="tab-btn"        style="padding:3px 10px;font-size:.72rem">Dia</button>
+        <button onclick="setAgendaView('semana')" id="av-btn-semana" class="tab-btn"        style="padding:3px 10px;font-size:.72rem">Semana</button>
+        <button onclick="setAgendaView('mes')"    id="av-btn-mes"    class="tab-btn"        style="padding:3px 10px;font-size:.72rem">Mês</button>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+      <div class="card" style="background:var(--surface2)"><div class="kpi-label">Reservas com voo</div><div class="kpi-val" id="av-reservas" style="color:var(--cyan)">—</div><div class="kpi-delta" id="av-reservas-sub"></div></div>
+      <div class="card" style="background:var(--surface2)"><div class="kpi-label">PAX</div><div class="kpi-val" id="av-pax">—</div><div class="kpi-delta" id="av-pax-sub"></div></div>
+      <div class="card" style="background:var(--surface2)"><div class="kpi-label">Receita reservada</div><div class="kpi-val" id="av-receita" style="color:var(--green);font-size:1.2rem">—</div><div class="kpi-delta">valor das reservas</div></div>
+      <div class="card" style="background:var(--surface2)"><div class="kpi-label">Ticket médio</div><div class="kpi-val" id="av-ticket" style="font-size:1.2rem">—</div><div class="kpi-delta">por reserva</div></div>
+      <div class="card" style="background:var(--surface2)"><div class="kpi-label" id="av-pace-label">vs ano anterior</div><div class="kpi-val" id="av-pace" style="font-size:1.3rem">—</div><div class="kpi-delta" id="av-pace-sub"></div></div>
+    </div>
+    <canvas id="chartAgendaVoos" height="90"></canvas>
+    <div id="av-nota" style="font-size:.72rem;color:var(--sub);margin-top:10px"></div>
+  </div>
 
   <div class="grid grid-cols-2 gap-3 mb-5">
     <div class="card"><div class="kpi-label">Total Reservas</div><div class="kpi-val" id="rk-total">{rz["total"]}</div><div class="kpi-delta" id="rk-total-delta"></div></div>
@@ -1609,6 +1665,18 @@ const CUPOM_STATUS = {cupom_status_json};
 const HOJE         = "{hoje_str}";
 const D30_FROM     = "{d30_str}";
 const D90_FROM     = "{d90_str}";
+
+// ─── Datas: limites do calendário e utilitários ──────────────────────────────
+// O calendário vai até o último voo já reservado, para ver reservas de meses futuros
+const MAX_VOO     = BOOKINGS.reduce((m, b) => b.t && b.t > m ? b.t : m, HOJE);
+const MIN_RESERVA = BOOKINGS.reduce((m, b) => b.d && b.d < m ? b.d : m, HOJE);
+const MESES_PT    = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const _isoLocal   = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+const addDias     = (s, n) => {{ const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return _isoLocal(d); }};
+const addMeses    = (s, n) => {{ const [y, m, d] = s.split('-').map(Number); return _isoLocal(new Date(y, m - 1 + n, d, 12)); }};
+const ultimoDia   = s => {{ const [y, m] = s.split('-').map(Number); return _isoLocal(new Date(y, m, 0, 12)); }};
+const addAnos     = (s, n) => {{ const md = s.slice(5); return (+s.slice(0,4) + n) + '-' + (md === '02-29' ? '02-28' : md); }};
+const nDiasEntre  = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000) + 1;
 const ANNOTATIONS = {annotations_json};
 let currentFrom = D30_FROM, currentTo = HOJE;
 
@@ -2177,7 +2245,7 @@ function renderPagamentos(from, to) {{
 function applyDateRange(from, to, prev, fulfilTo) {{
   currentFrom = from; currentTo = to;
   // Fulfilments (data do voo) vão até o fim do ciclo 26→25: inclui voos já agendados do ciclo
-  const fTo = fulfilTo || (to >= HOJE ? fimCiclo(to) : to);
+  const fTo = fulfilTo || (to === HOJE ? fimCiclo(to) : to);
 
   // ── Período atual ──
   const mDays  = META_DATA.diario.filter(d => d.data >= from && d.data <= to);
@@ -2306,6 +2374,7 @@ function applyDateRange(from, to, prev, fulfilTo) {{
   buildRezdyStatusDiario('chartRezdyStatusDiario', rDaysAgg);
   buildBookingVsFulfilment('chartBookingVsFulfilment', from, to, fTo);
   buildBookingsFonte(from, to);
+  renderAgendaVoos(from, to);
 
   // ── Tabelas e gráficos dinâmicos ──
   renderCampanhas(from, to);
@@ -2316,7 +2385,7 @@ function applyDateRange(from, to, prev, fulfilTo) {{
   renderCupons(from, to);
 
   // ── Range label + títulos dinâmicos ──
-  setText('range-label', days + ' dias selecionados');
+  setText('range-label', days + ' dias selecionados' + (to > HOJE ? ' · vendas até hoje, voos até ' + to.slice(8,10) + '/' + to.slice(5,7) + '/' + to.slice(2,4) : ''));
   const fmtD = d => d.slice(8) + '-' + d.slice(5,7) + '-' + d.slice(0,4);
   setText('camps-title', 'Campanhas — ' + fmtD(from) + ' a ' + fmtD(to));
   renderCriativos(from, to);
@@ -2324,6 +2393,171 @@ function applyDateRange(from, to, prev, fulfilTo) {{
   // Avisa a Comparação de Períodos (comparacao.js) sobre o período em uso
   window.__vrPeriodo = {{from, to, pFrom, pTo, custom: !!prev}};
   window.dispatchEvent(new CustomEvent('vr:periodo', {{detail: window.__vrPeriodo}}));
+}}
+
+// ─── Navegação do calendário: atalhos, mês e setas ◀ ▶ ───────────────────────
+function setRange(from, to) {{
+  if (from < D90_FROM) from = D90_FROM;
+  if (to > MAX_VOO) to = MAX_VOO;
+  if (from > to) return;
+  if (window.__vrFp) window.__vrFp.setDate([from, to], false);
+  applyDateRange(from, to);
+  const sm = document.getElementById('range-mes');
+  if (sm) sm.value = (from.slice(8) === '01' && to === ultimoDia(from)) ? from.slice(0,7) : '';
+}}
+
+function applyPreset(v) {{
+  if (!v) return;
+  const fimC = fimCiclo(HOJE), iniC = addDias(addMeses(fimC, -1), 1);   // ciclo atual: 26 → 25
+  const mes1 = HOJE.slice(0,8) + '01';
+  const r = {{
+    '7d':          [addDias(HOJE, -6),  HOJE],
+    '30d':         [addDias(HOJE, -29), HOJE],
+    '90d':         [addDias(HOJE, -89), HOJE],
+    'mes-ant':     [addMeses(mes1, -1), ultimoDia(addMeses(mes1, -1))],
+    'ciclo-ant':   [addMeses(iniC, -1), addMeses(fimC, -1)],
+    'mes-atual':   [mes1, ultimoDia(mes1)],
+    'ciclo-atual': [iniC, fimC],
+    'ano-atual':   [HOJE.slice(0,4) + '-01-01', HOJE.slice(0,4) + '-12-31'],
+    'prox-30':     [HOJE, addDias(HOJE, 29)],
+    'prox-90':     [HOJE, addDias(HOJE, 89)],
+    'mes-prox':    [addMeses(mes1, 1), ultimoDia(addMeses(mes1, 1))],
+    'ciclo-prox':  [addMeses(iniC, 1), addMeses(fimC, 1)],
+    'futuro':      [HOJE, MAX_VOO],
+    'tudo':        [D90_FROM, MAX_VOO],
+  }}[v];
+  if (r) setRange(r[0], r[1]);
+}}
+
+function applyMes(ym) {{
+  if (!ym) return;
+  document.getElementById('range-preset').value = '';
+  setRange(ym + '-01', ultimoDia(ym + '-01'));
+}}
+
+// Avança/volta o período pelo próprio tamanho: meses inteiros, ciclos 26→25 ou nº de dias
+function shiftRange(dir) {{
+  const f = currentFrom, t = currentTo;
+  const meses = (+t.slice(0,4) - +f.slice(0,4)) * 12 + (+t.slice(5,7) - +f.slice(5,7));
+  document.getElementById('range-preset').value = '';
+  if (f.slice(8) === '01' && t === ultimoDia(t)) {{
+    const n = meses + 1, ini = addMeses(f, dir * n);
+    setRange(ini, ultimoDia(addMeses(ini, n - 1)));
+  }} else if (f.slice(8) === '26' && t.slice(8) === '25' && meses > 0) {{
+    setRange(addMeses(f, dir * meses), addMeses(t, dir * meses));
+  }} else {{
+    const n = nDiasEntre(f, t);
+    setRange(addDias(f, dir * n), addDias(t, dir * n));
+  }}
+}}
+
+function popularMeses() {{
+  const sel = document.getElementById('range-mes');
+  if (!sel) return;
+  const opts = [];
+  for (let ym = D90_FROM.slice(0,7); ym <= MAX_VOO.slice(0,7); ym = addMeses(ym + '-01', 1).slice(0,7)) {{
+    const [y, m] = ym.split('-').map(Number);
+    opts.push(`<option value="${{ym}}">${{MESES_PT[m-1]}} ${{y}}${{ym > HOJE.slice(0,7) ? ' ✈' : ''}}</option>`);
+  }}
+  sel.innerHTML = '<option value="">Ir para mês…</option>' + opts.reverse().join('');
+}}
+
+// ─── Agenda de voos (pela data do voo) ────────────────────────────────────────
+// Reservas confirmadas cujo voo cai no período — inclui datas futuras, para ver como
+// está um mês à frente (ex.: fevereiro) e o ritmo de reservas contra o mesmo período
+// do ano anterior na mesma antecedência (o que já estava reservado um ano antes de hoje).
+let _avView = 'auto', _avFrom = '', _avTo = '';
+
+function setAgendaView(v) {{
+  _avView = v;
+  ['auto','dia','semana','mes'].forEach(k => {{
+    const b = document.getElementById('av-btn-' + k);
+    if (b) b.classList.toggle('active', k === v);
+  }});
+  renderAgendaVoos(_avFrom, _avTo);
+}}
+
+function renderAgendaVoos(from, to) {{
+  _avFrom = from; _avTo = to;
+  const fmtD = d => d.slice(8,10) + '/' + d.slice(5,7) + '/' + d.slice(2,4);
+  const varPct = (a, b) => b ? ((a - b) / b * 100) : null;
+  const fVar = p => p == null ? '—' : (p >= 0 ? '▲ +' : '▼ ') + p.toFixed(1).replace('.', ',') + '%';
+  const voos = BOOKINGS.filter(b => b.t && b.t >= from && b.t <= to);
+  const ja   = voos.filter(b => b.t < HOJE);
+  const pax  = voos.reduce((s, b) => s + (b.px || 0), 0);
+  const rec  = voos.reduce((s, b) => s + (b.v || 0), 0);
+  const futuro = to >= HOJE;
+
+  setText('av-sub', `Voos de ${{fmtD(from)}} a ${{fmtD(to)}}` + (futuro ? ` · posição de hoje (${{fmtD(HOJE)}}): o número ainda cresce até a data do voo` : ''));
+  setText('av-reservas', fN(voos.length));
+  setText('av-reservas-sub', futuro ? `${{ja.length}} já voaram · ${{voos.length - ja.length}} a voar` : 'todos já voaram');
+  setText('av-pax', fN(pax));
+  setText('av-pax-sub', voos.length ? (pax / voos.length).toFixed(2).replace('.', ',') + ' por reserva' : '');
+  setText('av-receita', fBRL(rec));
+  setText('av-ticket', voos.length ? fBRL(rec / voos.length) : '—');
+
+  // Mesmo período um ano antes: total final e o que já estava reservado na mesma antecedência
+  const lyFrom = addAnos(from, -1), lyTo = addAnos(to, -1), lyHoje = addAnos(HOJE, -1);
+  const ly = BOOKINGS.filter(b => b.t && b.t >= lyFrom && b.t <= lyTo);
+  const lyMesma = ly.filter(b => b.d <= lyHoje);
+  const lyCompleto = lyFrom >= addDias(MIN_RESERVA, 60);   // voos logo após o início dos dados perdem reservas antigas
+  const paceEl = document.getElementById('av-pace');
+  let p = null;
+  if (!ly.length) {{
+    setText('av-pace-label', 'vs ano anterior');
+    setText('av-pace-sub', 'sem dados do ano anterior');
+  }} else if (futuro) {{
+    p = varPct(voos.length, lyMesma.length);
+    setText('av-pace-label', 'Ritmo vs ano anterior');
+    setText('av-pace-sub', `${{fN(lyMesma.length)}} reservadas em ${{fmtD(lyHoje)}} · terminou com ${{fN(ly.length)}}`);
+  }} else {{
+    p = varPct(voos.length, ly.length);
+    setText('av-pace-label', 'vs ano anterior');
+    setText('av-pace-sub', `${{fN(ly.length)}} voos em ${{fmtD(lyFrom)}}–${{fmtD(lyTo)}}`);
+  }}
+  setText('av-pace', fVar(p));
+  if (paceEl) paceEl.style.color = p == null ? '' : p >= 0 ? 'var(--green)' : 'var(--red)';
+
+  // Gráfico por data do voo
+  const span = nDiasEntre(from, to);
+  const view = _avView !== 'auto' ? _avView : span <= 45 ? 'dia' : span <= 200 ? 'semana' : 'mes';
+  const bucket = s => {{
+    if (view === 'dia') return s;
+    if (view === 'mes') return s.slice(0,7);
+    const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() - d.getDay()); return _isoLocal(d);
+  }};
+  const keys = [];
+  for (let s = from; s <= to; s = addDias(s, 1)) {{ const k = bucket(s); if (keys[keys.length-1] !== k) keys.push(k); }}
+  const conta = (lista, mapa = s => s) => {{ const m = {{}}; lista.forEach(b => {{ const k = bucket(mapa(b.t)); m[k] = (m[k] || 0) + 1; }}); return m; }};
+  const mJa = conta(ja), mAVoar = conta(voos.filter(b => b.t >= HOJE));
+  const mLy = conta(ly, s => addAnos(s, 1)), mLyMesma = conta(lyMesma, s => addAnos(s, 1));
+  const label = k => view === 'mes' ? MESES_PT[+k.slice(5,7)-1].slice(0,3) + '/' + k.slice(2,4) : fAxis(k);
+  const datasets = [
+    {{ label:'Já voaram', data:keys.map(k => mJa[k] || 0), backgroundColor:'rgba(6,182,212,.7)', borderRadius:3, stack:'atual', order:3 }},
+    {{ label:'Reservados para voar', data:keys.map(k => mAVoar[k] || 0), backgroundColor:'rgba(99,102,241,.75)', borderRadius:3, stack:'atual', order:3 }},
+  ];
+  if (ly.length) {{
+    datasets.push({{ label:'Ano anterior (final)', data:keys.map(k => mLy[k] || 0), type:'line', stack:'ly', borderColor:'#f59e0b',
+      backgroundColor:'transparent', tension:0.3, pointRadius:2, borderWidth:2, order:1 }});
+    if (futuro) datasets.push({{ label:'Ano anterior na mesma data', data:keys.map(k => mLyMesma[k] || 0), type:'line', stack:'ly2',
+      borderColor:'#f59e0b', borderDash:[5,4], backgroundColor:'transparent', tension:0.3, pointRadius:0, borderWidth:1.5, order:2 }});
+  }}
+  makeChart('chartAgendaVoos', {{
+    type: 'bar',
+    data: {{ labels: keys.map(label), datasets }},
+    options: {{
+      responsive:true, interaction:{{mode:'index', intersect:false}},
+      plugins:{{ legend:{{ labels:{{ boxWidth:12 }} }} }},
+      scales:{{
+        x:{{ stacked:true, grid:{{display:false}}, ticks:{{maxTicksLimit:18}} }},
+        y:{{ stacked:true, grid:{{color:'rgba(51,65,85,.4)'}}, beginAtZero:true, ticks:{{precision:0}} }}
+      }}
+    }}
+  }});
+
+  setText('av-nota', `Uma reserva conta uma vez, na data do seu voo. Há voos reservados até ${{fmtD(MAX_VOO)}}.`
+    + (ly.length ? ' "Ano anterior na mesma data" = o que já estava reservado um ano antes de hoje, para o mesmo período.' : '')
+    + (ly.length && !lyCompleto ? ' ⚠ O ano anterior pode estar incompleto: reservas feitas antes de ' + fmtD(MIN_RESERVA) + ' não estão nos dados.' : ''));
 }}
 
 // ─── Render dinâmico de campanhas, produtos e bookings ───────────────────────
@@ -3189,18 +3423,20 @@ window.__vrFp = flatpickr("#date-range", {{
   altFormat: "d-m-Y",
   defaultDate: [D30_FROM, HOJE],
   minDate: D90_FROM,
-  maxDate: HOJE,
+  maxDate: MAX_VOO,
+  showMonths: window.innerWidth > 760 ? 2 : 1,
   disableMobile: true,
   onChange: function(dates) {{
     if (dates.length === 2) {{
-      const fmt = d => d.toISOString().slice(0,10);
-      applyDateRange(fmt(dates[0]), fmt(dates[1]));
+      ['range-preset','range-mes'].forEach(id => {{ const el = document.getElementById(id); if (el) el.value = ''; }});
+      applyDateRange(_isoLocal(dates[0]), _isoLocal(dates[1]));
     }}
   }}
 }});
 
 // ─── Init com últimos 30d ─────────────────────────────────────────────────────
 populateVendedorFilter();
+popularMeses();
 applyDateRange(D30_FROM, HOJE);
 renderHeatmap();
 
