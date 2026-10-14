@@ -84,7 +84,8 @@
   const tipoProduto = nome => /no-?show/i.test(nome) ? 'noshow' : /fee/i.test(nome) ? 'fee' : /gift/i.test(nome) ? 'gift'
     : /doors|voo|flight|heli/i.test(nome) ? 'voo' : 'outro';
 
-  function calcular(ini, fim) {
+  // fimVoo: fim do período para os voos (Fulfilment Date) — o período inteiro, inclusive dias futuros do ciclo
+  function calcular(ini, fim, fimVoo = fim) {
     const D = S.dados, P = D.produtos, E = D.extras;
     const venda = D.b.filter(x => x[1] >= ini && x[1] <= fim);              // Booking Date
     const conf = venda.filter(x => x[2] === 'C');
@@ -138,7 +139,7 @@
     D.b.forEach(x => {
       if (x[2] !== 'C') return;
       x[7].forEach(it => {
-        const t = it[1]; if (!t || t < ini || t > fim || tipoProduto(P[it[0]]) !== 'voo') return;
+        const t = it[1]; if (!t || t < ini || t > fimVoo || tipoProduto(P[it[0]]) !== 'voo') return;
         if (t < hoje()) r.voos.realizados++; else r.voos.agendados++;
         r.voos.pax += it[3] || 0;
         if (it[2]) r.voos.minutos += it[2]; else r.voos.semDuracao++;
@@ -202,7 +203,7 @@
   function renderResultado() {
     const box = document.getElementById('cmp-res');
     if (S.modo !== 'personalizada' || !S.aplicado) { box.innerHTML = ''; return; }
-    const ef = S.aplicado, a = calcular(ef.A.ini, ef.A.fimEf), b = calcular(ef.B.ini, ef.B.fimEf);
+    const ef = S.aplicado, a = calcular(ef.A.ini, ef.A.fimEf, ef.A.fim), b = calcular(ef.B.ini, ef.B.fimEf, ef.B.fim);
     const shareRec = (r, c) => r.bruta ? r.canal[c].receita / r.bruta * 100 : null;
     const shareBk = (r, c) => r.bookings ? r.canal[c].bookings / r.bookings * 100 : null;
     const tk = (r, c) => r.canal[c].bookings ? r.canal[c].receita / r.canal[c].bookings : null;
@@ -240,7 +241,7 @@
           `Ticket médio Online × Interno — A: ${brl(tk(a, 'O'))} × ${brl(tk(a, 'I'))} · B: ${brl(tk(b, 'O'))} × ${brl(tk(b, 'I'))}. Negotiated Rate = marketplaces com tarifa negociada (GetYourGuide).`)}
       </div>
 
-      <div class="cmp-sec"><div class="cmp-st">Fulfilments <span>· pela data do voo (Fulfilment Date)</span></div>
+      <div class="cmp-sec"><div class="cmp-st">Fulfilments <span>· pela data do voo (Fulfilment Date), período inteiro: A ${dataAno(ef.A.ini)} – ${dataAno(ef.A.fim)} · B ${dataAno(ef.B.ini)} – ${dataAno(ef.B.fim)}</span></div>
         <div class="cmp-grid">
           ${cartao('Voos realizados', a.voos.realizados, b.voos.realizados, x => num(x), 1, 'Reservas confirmadas com voo no período e antes de hoje')}
           ${cartao('Voos agendados', a.voos.agendados, b.voos.agendados, x => num(x), 1, 'Reservas confirmadas com voo a partir de hoje')}
@@ -361,7 +362,7 @@
     try { await carregar(); } catch (_) { msg.textContent = 'Não foi possível carregar os dados da comparação.'; return; }
     S.aplicado = efetivos();
     // Todo o dashboard existente passa a usar B como período e A como comparação
-    if (typeof applyDateRange === 'function') applyDateRange(S.aplicado.B.ini, S.aplicado.B.fimEf, {from: S.aplicado.A.ini, to: S.aplicado.A.fimEf});
+    if (typeof applyDateRange === 'function') applyDateRange(S.aplicado.B.ini, S.aplicado.B.fimEf, {from: S.aplicado.A.ini, to: S.aplicado.A.fimEf}, S.aplicado.B.fim);
     if (window.__vrFp) window.__vrFp.setDate([S.aplicado.B.ini, S.aplicado.B.fimEf], false);
     render();
   }

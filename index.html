@@ -377,7 +377,7 @@
   <div class="grid grid-cols-2 gap-3 mb-5">
     <div class="card"><div class="kpi-label">Total Reservas</div><div class="kpi-val" id="rk-total">15664</div><div class="kpi-delta" id="rk-total-delta"></div></div>
     <div class="card"><div class="kpi-label">Confirmadas</div><div class="kpi-val" id="rk-conf" style="color:var(--green)">7293</div><div class="kpi-delta" id="rk-conf-delta"></div></div>
-    <div class="card"><div class="kpi-label">Voos Realizados</div><div class="kpi-val" id="rk-fulfilments" style="color:var(--cyan)">7115</div><div class="kpi-delta">pelo dia do voo</div></div>
+    <div class="card"><div class="kpi-label">Fulfilments</div><div class="kpi-val" id="rk-fulfilments" style="color:var(--cyan)">7115</div><div class="kpi-delta" id="rk-fulfilments-sub">pelo dia do voo</div></div>
     <div class="card"><div class="kpi-label">Abandonadas</div><div class="kpi-val" id="rk-aband" style="color:var(--red)">7810</div><div class="kpi-delta" id="rk-aband-delta"></div></div>
     <div class="card"><div class="kpi-label">Receita</div><div class="kpi-val" id="rk-receita" style="color:var(--green);font-size:1.2rem">R$ 23.176.538,59</div><div class="kpi-delta" id="rk-receita-delta"></div></div>
     <div class="card"><div class="kpi-label">Ticket Médio</div><div class="kpi-val" id="rk-ticket" style="font-size:1.3rem">R$ 3.177,92</div><div class="kpi-delta" id="rk-ticket-delta"></div></div>
@@ -1011,7 +1011,14 @@ function buildRezdyStatusDiario(canvasId, rDays) {
 }
 
 let _fulfilView = 'dia';
-let _fulfilFrom = '', _fulfilTo = '';
+let _fulfilFrom = '', _fulfilTo = '', _fulfilFTo = '';
+
+// Fim do ciclo (26 de um mês a 25 do seguinte) que contém a data
+function fimCiclo(s) {
+  let [y, m, d] = s.split('-').map(Number);
+  if (d >= 26) { m++; if (m > 12) { m = 1; y++; } }
+  return `${y}-${String(m).padStart(2,'0')}-25`;
+}
 
 function setFulfilView(view) {
   _fulfilView = view;
@@ -1019,11 +1026,12 @@ function setFulfilView(view) {
     const btn = document.getElementById('fulfil-btn-' + v);
     if (btn) btn.classList.toggle('active', v === view);
   });
-  buildBookingVsFulfilment('chartBookingVsFulfilment', _fulfilFrom, _fulfilTo);
+  buildBookingVsFulfilment('chartBookingVsFulfilment', _fulfilFrom, _fulfilTo, _fulfilFTo);
 }
 
-function buildBookingVsFulfilment(canvasId, from, to) {
-  _fulfilFrom = from; _fulfilTo = to;
+function buildBookingVsFulfilment(canvasId, from, to, fTo) {
+  _fulfilFrom = from; _fulfilTo = to; _fulfilFTo = fTo || to;
+  const fimF = _fulfilFTo;
 
   const bucket = date => {
     if (_fulfilView === 'dia') return date;
@@ -1042,7 +1050,7 @@ function buildBookingVsFulfilment(canvasId, from, to) {
   for (const b of BOOKINGS) {
     if (b.s !== 'CONFIRMED') continue;
     if (b.d >= from && b.d <= to) { const k = bucket(b.d); bookMap[k] = (bookMap[k]||0) + 1; }
-    if (b.t && b.t >= from && b.t <= to) { const k = bucket(b.t); fulfMap[k] = (fulfMap[k]||0) + 1; }
+    if (b.t && b.t >= from && b.t <= fimF) { const k = bucket(b.t); fulfMap[k] = (fulfMap[k]||0) + 1; }
   }
 
   const keys = [...new Set([...Object.keys(bookMap), ...Object.keys(fulfMap)])].sort();
@@ -1054,7 +1062,7 @@ function buildBookingVsFulfilment(canvasId, from, to) {
       datasets: [
         { label:'Reservas feitas', data:keys.map(k=>bookMap[k]||0),
            backgroundColor:'rgba(99,102,241,.65)', borderRadius:3, order:2 },
-        { label:'Voos realizados (fulfilment)', data:keys.map(k=>fulfMap[k]||0),
+        { label:'Voos (fulfilment)', data:keys.map(k=>fulfMap[k]||0),
            type:'line', borderColor:'#06b6d4', backgroundColor:'rgba(6,182,212,.12)',
            fill:true, tension:0.4, pointRadius:2, borderWidth:2, order:1 },
       ]
@@ -1239,8 +1247,10 @@ function renderPagamentos(from, to) {
 }
 
 // ─── Date range apply ─────────────────────────────────────────────────────────
-function applyDateRange(from, to, prev) {
+function applyDateRange(from, to, prev, fulfilTo) {
   currentFrom = from; currentTo = to;
+  // Fulfilments (data do voo) vão até o fim do ciclo 26→25: inclui voos já agendados do ciclo
+  const fTo = fulfilTo || (to >= HOJE ? fimCiclo(to) : to);
 
   // ── Período atual ──
   const mDays  = META_DATA.diario.filter(d => d.data >= from && d.data <= to);
@@ -1353,8 +1363,10 @@ function applyDateRange(from, to, prev) {
   setText('rk-taxa',   fPct(rTaxa));setHtml('rk-taxa-delta',  fDelta(rTaxa,  prTotal?prConf/prTotal*100:0, 1));
   setText('rk-proj',   fN(projMes));
   setText('rk-proj-sub', `média ${dailyAvgConf.toFixed(1)}/dia · mais ${daysLeft} dias restantes`);
-  const rFulfilments = BOOKINGS.filter(b => b.s === 'CONFIRMED' && b.t && b.t >= from && b.t <= to && b.t <= HOJE).length;
-  setText('rk-fulfilments', rFulfilments);
+  const fulfCiclo = BOOKINGS.filter(b => b.s === 'CONFIRMED' && b.t && b.t >= from && b.t <= fTo);
+  const fulfReal  = fulfCiclo.filter(b => b.t < HOJE).length;
+  setText('rk-fulfilments', fulfCiclo.length);
+  setText('rk-fulfilments-sub', `${fulfReal} realizados · ${fulfCiclo.length - fulfReal} agendados · até ${fTo.slice(8,10)}/${fTo.slice(5,7)}`);
 
   // ── Update charts ──
   buildMetaDiario('chartMetaDiario', mDays);
@@ -1365,7 +1377,7 @@ function applyDateRange(from, to, prev) {
   buildRezdyDiario('chartRezdyDiario2', rDaysAgg);
   buildRezdyReceita('chartRezdyReceita', rDaysAgg);
   buildRezdyStatusDiario('chartRezdyStatusDiario', rDaysAgg);
-  buildBookingVsFulfilment('chartBookingVsFulfilment', from, to);
+  buildBookingVsFulfilment('chartBookingVsFulfilment', from, to, fTo);
   buildBookingsFonte(from, to);
 
   // ── Tabelas e gráficos dinâmicos ──
