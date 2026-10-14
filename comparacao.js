@@ -187,18 +187,19 @@
   // ─── Render ────────────────────────────────────────────────────────────────
   // Datas efetivamente usadas em cada período, no formato dd/mm/aa – dd/mm/aa
   const dataAno = s => `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(2, 4)}`;
-  const datasDe = P => P ? `${dataAno(P.ini)} – ${dataAno(P.fimEf)}` : '';
-  function cartao(rotulo, a, b, fmt, bom = 1, dica = '') {
+  // inteiro = período completo selecionado (usado nos Fulfilments, que incluem voos já agendados)
+  const datasDe = (P, inteiro) => P ? `${dataAno(P.ini)} – ${dataAno(inteiro ? P.fim : P.fimEf)}` : '';
+  function cartao(rotulo, a, b, fmt, bom = 1, dica = '', inteiro = false) {
     const {A, B} = S.aplicado || {};
     return `<div class="cmp-k"${dica ? ` title="${esc(dica)}"` : ''}><div class="cmp-kl">${rotulo}</div>
-      <div class="cmp-kv">${b == null ? '—' : fmt(b)}</div><div class="cmp-kd">B · ${datasDe(B)}</div>
-      <div class="cmp-ka">A · ${datasDe(A)}: <b>${a == null ? '—' : fmt(a)}</b></div>${variacao(a, b, fmt, bom)}</div>`;
+      <div class="cmp-kv">${b == null ? '—' : fmt(b)}</div><div class="cmp-kd">B · ${datasDe(B, inteiro)}</div>
+      <div class="cmp-ka">A · ${datasDe(A, inteiro)}: <b>${a == null ? '—' : fmt(a)}</b></div>${variacao(a, b, fmt, bom)}</div>`;
   }
   function linha(rotulo, a, b, fmt, bom = 1, pp = false) {
     return `<tr><td>${rotulo}</td><td class="r">${a == null ? '—' : fmt(a)}</td><td class="r">${b == null ? '—' : fmt(b)}</td><td class="r">${variacao(a, b, fmt, bom, pp)}</td></tr>`;
   }
-  const tabela = (titulo, linhas, nota = '') => `<div class="cmp-tb"><div class="cmp-tt">${titulo}</div><div class="cmp-sc"><table>
-    <thead><tr><th></th><th class="r"><span class="cmp-tag a">A</span> ${datasDe(S.aplicado && S.aplicado.A)}</th><th class="r"><span class="cmp-tag b">B</span> ${datasDe(S.aplicado && S.aplicado.B)}</th><th class="r">Variação (B vs A)</th></tr></thead><tbody>${linhas}</tbody></table></div>${nota ? `<div class="cmp-nt">${nota}</div>` : ''}</div>`;
+  const tabela = (titulo, linhas, nota = '', inteiro = false) => `<div class="cmp-tb"><div class="cmp-tt">${titulo}</div><div class="cmp-sc"><table>
+    <thead><tr><th></th><th class="r"><span class="cmp-tag a">A</span> ${datasDe(S.aplicado && S.aplicado.A, inteiro)}</th><th class="r"><span class="cmp-tag b">B</span> ${datasDe(S.aplicado && S.aplicado.B, inteiro)}</th><th class="r">Variação (B vs A)</th></tr></thead><tbody>${linhas}</tbody></table></div>${nota ? `<div class="cmp-nt">${nota}</div>` : ''}</div>`;
 
   function renderResultado() {
     const box = document.getElementById('cmp-res');
@@ -241,17 +242,17 @@
           `Ticket médio Online × Interno — A: ${brl(tk(a, 'O'))} × ${brl(tk(a, 'I'))} · B: ${brl(tk(b, 'O'))} × ${brl(tk(b, 'I'))}. Negotiated Rate = marketplaces com tarifa negociada (GetYourGuide).`)}
       </div>
 
-      <div class="cmp-sec"><div class="cmp-st">Fulfilments <span>· pela data do voo (Fulfilment Date), período inteiro: A ${dataAno(ef.A.ini)} – ${dataAno(ef.A.fim)} · B ${dataAno(ef.B.ini)} – ${dataAno(ef.B.fim)}</span></div>
+      <div class="cmp-sec"><div class="cmp-st">Fulfilments <span>· pela data do voo (Fulfilment Date) · período inteiro, inclusive voos agendados</span></div>
         <div class="cmp-grid">
-          ${cartao('Voos realizados', a.voos.realizados, b.voos.realizados, x => num(x), 1, 'Reservas confirmadas com voo no período e antes de hoje')}
-          ${cartao('Voos agendados', a.voos.agendados, b.voos.agendados, x => num(x), 1, 'Reservas confirmadas com voo a partir de hoje')}
-          ${cartao('PAX voando', a.voos.pax, b.voos.pax, x => num(x))}
+          ${cartao('Voos realizados', a.voos.realizados, b.voos.realizados, x => num(x), 1, 'Reservas confirmadas com voo no período e antes de hoje', true)}
+          ${cartao('Voos agendados', a.voos.agendados, b.voos.agendados, x => num(x), 1, 'Reservas confirmadas com voo a partir de hoje até o fim do período', true)}
+          ${cartao('PAX voando', a.voos.pax, b.voos.pax, x => num(x), 1, '', true)}
           ${cartao('PAX por booking', a.paxPorBooking, b.paxPorBooking, x => num(x, 2), 1, 'Pela data da reserva')}
-          ${cartao('Horas de voo reservadas', a.voos.minutos / 60, b.voos.minutos / 60, x => num(x, 1) + ' h', 1, 'Soma da duração de cada reserva')}
+          ${cartao('Horas de voo reservadas', a.voos.minutos / 60, b.voos.minutos / 60, x => num(x, 1) + ' h', 1, 'Soma da duração de cada reserva', true)}
         </div>
         ${tabela('Mix de produtos (voos no período)', mix.map(p => linha(esc(p), a.voos.mix[p] || 0, b.voos.mix[p] || 0, x => num(x)) +
           linha(`↳ participação`, totVoos(a) ? (a.voos.mix[p] || 0) / totVoos(a) * 100 : null, totVoos(b) ? (b.voos.mix[p] || 0) / totVoos(b) * 100 : null, x => pct(x), 0, true)).join('') || '<tr><td colspan="4">Sem voos no período.</td></tr>',
-          `"Voos" = reservas com voo na data (um voo compartilhado conta uma vez por reserva). Horas = soma da duração informada no Rezdy por reserva${a.voos.semDuracao + b.voos.semDuracao ? `; ${a.voos.semDuracao + b.voos.semDuracao} reservas sem duração não entram` : ''}.${fulfilIncompleto ? ' ⚠ Voos até fev/2025 podem estar incompletos: reservas feitas antes de 2025 não estão nos dados.' : ''}`)}
+          `"Voos" = reservas com voo na data (um voo compartilhado conta uma vez por reserva). Horas = soma da duração informada no Rezdy por reserva${a.voos.semDuracao + b.voos.semDuracao ? `; ${a.voos.semDuracao + b.voos.semDuracao} reservas sem duração não entram` : ''}.${fulfilIncompleto ? ' ⚠ Voos até fev/2025 podem estar incompletos: reservas feitas antes de 2025 não estão nos dados.' : ''}`, true)}
       </div>
 
       <div class="cmp-sec"><div class="cmp-st">Conversão e pagamentos</div>
