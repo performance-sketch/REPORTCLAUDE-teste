@@ -779,6 +779,14 @@ def processar_rezdy(reservas, dias=None):
         ):
             if _val:
                 todos_bookings[-1][_k] = round(_val, 2)
+        _exd = defaultdict(lambda: [0, 0.0])
+        for i in itens:
+            for e in (i.get("extras") or []):
+                if e.get("quantity"):
+                    _exd[e.get("name") or "?"][0] += e["quantity"]
+                    _exd[e.get("name") or "?"][1] += float(e.get("price") or 0) * e["quantity"]
+        if _exd:
+            todos_bookings[-1]["exd"] = [[n, q, round(v, 2)] for n, (q, v) in _exd.items()]
 
     # Bookings CANCELLED/ON_HOLD de vendedores internos (não entram no todos_bookings
     # acima, que é só CONFIRMED e alimenta gráficos que assumem isso) — usado no card
@@ -3213,7 +3221,7 @@ function renderVendPerf(from, to) {{
   const fR = v => 'R$ ' + Math.round(v).toLocaleString('pt-BR');
   const dec = (v, n) => v.toFixed(n).replace('.', ',');
   const div = (a, b) => b ? a / b : 0;
-  const novo = () => ({{bk:0, px:0, v:0, ex:0, foc:0, focBk:0, cup:0}});
+  const novo = () => ({{bk:0, px:0, v:0, ex:0, foc:0, focBk:0, cup:0, exd:{{}}}});
   const ag = {{}}, tot = novo();
   for (const b of BOOKINGS) {{
     if (b.d < from || b.d > to || b.s !== 'CONFIRMED' || !b.vend) continue;
@@ -3221,6 +3229,10 @@ function renderVendPerf(from, to) {{
       a.bk++; a.px += (b.px || 1); a.v += b.v;
       a.ex += (b.ex || 0); a.foc += (b.foc || 0); a.cup += (b.cup || 0);
       if (b.foc) a.focBk++;
+      for (const [n, q, val] of (b.exd || [])) {{
+        const e = a.exd[n] || (a.exd[n] = {{q:0, v:0}});
+        e.q += q; e.v += val;
+      }}
     }}
   }}
   setText('vp-bk', tot.bk);
@@ -3238,6 +3250,14 @@ function renderVendPerf(from, to) {{
     tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#94a3b8;padding:12px">Nenhuma reserva interna no período</td></tr>`;
     return;
   }}
+  const linhaExtras = a => {{
+    const itens = Object.entries(a.exd).sort((x, y) => y[1].v - x[1].v);
+    if (!itens.length) return '<span style="font-size:.72rem;color:#64748b">Sem extras vendidos</span>';
+    return '<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:.72rem">' + itens.map(([n, e]) =>
+      `<span style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;color:#cbd5e1">
+        ${{escHtml(n)}}: <b>${{e.q}}</b> un · <span style="color:var(--cyan)">${{fR(e.v)}}</span> · ${{dec(div(e.q, a.px) * 100, 0)}}% dos pax
+      </span>`).join('') + '</div>';
+  }};
   const linha = (nome, a, total) => {{
     const focPct = div(a.foc, a.v) * 100;
     const corFoc = focPct >= 20 ? 'var(--red)' : focPct >= 10 ? 'var(--amber)' : '#94a3b8';
@@ -3256,7 +3276,8 @@ function renderVendPerf(from, to) {{
       <td style="text-align:right;color:${{corFoc}}">${{dec(focPct, 1)}}%</td>
       <td style="text-align:right;color:#94a3b8">${{fR(a.cup)}}</td>
       <td style="text-align:right;font-weight:600">${{fR(a.v - a.foc - a.cup)}}</td>
-    </tr>`;
+    </tr>
+    <tr><td colspan="13" style="padding:2px 12px 10px;border-top:none">${{linhaExtras(a)}}</td></tr>`;
   }};
   tbody.innerHTML = linhas.map(([n, a]) => linha(n, a, false)).join('') + linha('', tot, true);
 }}
