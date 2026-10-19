@@ -1538,6 +1538,7 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
   </div>
 
   <!-- Performance dos Vendedores (pax, ticket, extras, FOC) -->
+  <style>#vend-perf td {{ white-space:nowrap; }}</style>
   <div class="card mb-5" id="vend-perf">
     <div class="flex items-center justify-between flex-wrap gap-2" style="cursor:pointer" onclick="toggleVendPerf()">
       <div style="font-weight:600;font-size:.9rem"><span id="vend-perf-seta" style="display:inline-block;width:14px">▼</span> 📊 Performance dos Vendedores — Extras &amp; Free of Charge</div>
