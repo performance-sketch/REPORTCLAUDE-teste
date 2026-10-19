@@ -771,6 +771,14 @@ def processar_rezdy(reservas, dias=None):
             "vend": vendedor,
             "com":  (b.get("comments") or "").strip(),
         })
+        _pg = b.get("payments") or []
+        for _k, _val in (
+            ("ex",  sum(float(e.get("price") or 0) * (e.get("quantity") or 0) for i in itens for e in (i.get("extras") or []))),
+            ("foc", sum(float(x.get("amount") or 0) for x in _pg if x.get("type") == "FREE")),
+            ("cup", sum(float(x.get("amount") or 0) for x in _pg if x.get("type") == "PROMO_CODE")),
+        ):
+            if _val:
+                todos_bookings[-1][_k] = round(_val, 2)
 
     # Bookings CANCELLED/ON_HOLD de vendedores internos (não entram no todos_bookings
     # acima, que é só CONFIRMED e alimenta gráficos que assumem isso) — usado no card
@@ -1505,6 +1513,45 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
         </tr></thead>
         <tbody id="vendedores-body"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Performance dos Vendedores (pax, ticket, extras, FOC) -->
+  <div class="card mb-5" id="vend-perf">
+    <div class="flex items-center justify-between flex-wrap gap-2" style="cursor:pointer" onclick="toggleVendPerf()">
+      <div style="font-weight:600;font-size:.9rem"><span id="vend-perf-seta" style="display:inline-block;width:14px">▼</span> 📊 Performance dos Vendedores — Extras &amp; Free of Charge</div>
+      <span class="badge badge-gray">só CONFIRMED · data de criação · clique para minimizar</span>
+    </div>
+    <div id="vend-perf-body" style="margin-top:16px">
+      <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
+        <div class="card" style="background:var(--surface2)"><div class="kpi-label">Bookings</div><div class="kpi-val" id="vp-bk">—</div><div class="kpi-delta" id="vp-bk-sub"></div></div>
+        <div class="card" style="background:var(--surface2)"><div class="kpi-label">Pax / booking</div><div class="kpi-val" id="vp-pxbk">—</div><div class="kpi-delta">média do período</div></div>
+        <div class="card" style="background:var(--surface2)"><div class="kpi-label">Vendas totais</div><div class="kpi-val" id="vp-vendas" style="color:var(--green);font-size:1.2rem">—</div><div class="kpi-delta" id="vp-vendas-sub"></div></div>
+        <div class="card" style="background:var(--surface2)"><div class="kpi-label">Ticket médio</div><div class="kpi-val" id="vp-ticket" style="font-size:1.2rem">—</div><div class="kpi-delta">por booking</div></div>
+        <div class="card" style="background:var(--surface2)"><div class="kpi-label">Extras / pax</div><div class="kpi-val" id="vp-expax" style="color:var(--cyan);font-size:1.2rem">—</div><div class="kpi-delta" id="vp-expax-sub"></div></div>
+        <div class="card" style="background:var(--surface2)"><div class="kpi-label">Free of Charge</div><div class="kpi-val" id="vp-foc" style="color:var(--amber);font-size:1.2rem">—</div><div class="kpi-delta" id="vp-foc-sub"></div></div>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>Vendedor</th>
+            <th style="text-align:right">Bookings</th>
+            <th style="text-align:right">PAX</th>
+            <th style="text-align:right">Pax/booking</th>
+            <th style="text-align:right">Vendas</th>
+            <th style="text-align:right">Ticket médio</th>
+            <th style="text-align:right">Extras</th>
+            <th style="text-align:right">Extras/pax</th>
+            <th style="text-align:right">FOC (R$)</th>
+            <th style="text-align:right">Bookings c/ FOC</th>
+            <th style="text-align:right">FOC %</th>
+            <th style="text-align:right">Cupom</th>
+            <th style="text-align:right">Líquido</th>
+          </tr></thead>
+          <tbody id="vend-perf-tbody"></tbody>
+        </table>
+      </div>
+      <div style="font-size:.7rem;color:var(--sub);margin-top:10px">FOC = pagamentos tipo FREE no Rezdy (cortesias de GoPro/360/SSP, "desconto pra fechar", collabs, upgrades). Vendas = valor bruto da reserva. Líquido = vendas − FOC − cupom.</div>
     </div>
   </div>
 
@@ -2382,6 +2429,7 @@ function applyDateRange(from, to, prev, fulfilTo) {{
   renderBookings(from, to);
   renderPaises(from, to);
   renderVendedores(from, to);
+  renderVendPerf(from, to);
   renderCupons(from, to);
 
   // ── Range label + títulos dinâmicos ──
@@ -3125,6 +3173,72 @@ function populateVendedorFilter() {{
   const vendedores = [...new Set(BOOKINGS.concat(BOOKINGS_VEND_EXTRA).filter(b => b.vend).map(b => b.vend))].sort();
   sel.innerHTML = '<option value="">Todos vendedores</option>' +
     vendedores.map(v => `<option value="${{escHtml(v)}}">${{escHtml(v)}}</option>`).join('');
+}}
+
+function toggleVendPerf(forcar) {{
+  const body = document.getElementById('vend-perf-body');
+  const fechado = forcar !== undefined ? forcar : body.style.display !== 'none';
+  body.style.display = fechado ? 'none' : '';
+  document.getElementById('vend-perf-seta').textContent = fechado ? '▶' : '▼';
+  try {{ localStorage.setItem('vendPerfFechado', fechado ? '1' : '0'); }} catch (e) {{}}
+}}
+
+function renderVendPerf(from, to) {{
+  const tbody = document.getElementById('vend-perf-tbody');
+  if (!tbody) return;
+  if (!renderVendPerf.iniciado) {{
+    renderVendPerf.iniciado = true;
+    try {{ if (localStorage.getItem('vendPerfFechado') === '1') toggleVendPerf(true); }} catch (e) {{}}
+  }}
+  const fR = v => 'R$ ' + Math.round(v).toLocaleString('pt-BR');
+  const dec = (v, n) => v.toFixed(n).replace('.', ',');
+  const div = (a, b) => b ? a / b : 0;
+  const novo = () => ({{bk:0, px:0, v:0, ex:0, foc:0, focBk:0, cup:0}});
+  const ag = {{}}, tot = novo();
+  for (const b of BOOKINGS) {{
+    if (b.d < from || b.d > to || b.s !== 'CONFIRMED' || !b.vend) continue;
+    for (const a of [ag[b.vend] || (ag[b.vend] = novo()), tot]) {{
+      a.bk++; a.px += (b.px || 1); a.v += b.v;
+      a.ex += (b.ex || 0); a.foc += (b.foc || 0); a.cup += (b.cup || 0);
+      if (b.foc) a.focBk++;
+    }}
+  }}
+  setText('vp-bk', tot.bk);
+  setText('vp-bk-sub', tot.px + ' pax');
+  setText('vp-pxbk', dec(div(tot.px, tot.bk), 2));
+  setText('vp-vendas', fR(tot.v));
+  setText('vp-vendas-sub', 'líquido ' + fR(tot.v - tot.foc - tot.cup));
+  setText('vp-ticket', fR(div(tot.v, tot.bk)));
+  setText('vp-expax', fR(div(tot.ex, tot.px)));
+  setText('vp-expax-sub', fR(tot.ex) + ' em extras');
+  setText('vp-foc', fR(tot.foc));
+  setText('vp-foc-sub', dec(div(tot.foc, tot.v) * 100, 1) + '% das vendas · ' + tot.focBk + ' bookings');
+  const linhas = Object.entries(ag).sort((a, b) => b[1].v - a[1].v);
+  if (!linhas.length) {{
+    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#94a3b8;padding:12px">Nenhuma reserva interna no período</td></tr>`;
+    return;
+  }}
+  const linha = (nome, a, total) => {{
+    const focPct = div(a.foc, a.v) * 100;
+    const corFoc = focPct >= 20 ? 'var(--red)' : focPct >= 10 ? 'var(--amber)' : '#94a3b8';
+    const st = total ? 'font-weight:700;border-top:2px solid var(--border)' : '';
+    return `<tr style="${{st}}">
+      <td style="font-weight:600">${{total ? 'Total interno' : escHtml(nome)}}</td>
+      <td style="text-align:right;font-weight:600">${{a.bk}}</td>
+      <td style="text-align:right;color:#94a3b8">${{a.px}}</td>
+      <td style="text-align:right">${{dec(div(a.px, a.bk), 2)}}</td>
+      <td style="text-align:right;font-weight:600;color:#22c55e">${{fR(a.v)}}</td>
+      <td style="text-align:right">${{fR(div(a.v, a.bk))}}</td>
+      <td style="text-align:right;color:#94a3b8">${{fR(a.ex)}}</td>
+      <td style="text-align:right;color:var(--cyan)">${{fR(div(a.ex, a.px))}}</td>
+      <td style="text-align:right;color:${{a.foc ? 'var(--amber)' : '#94a3b8'}}">${{fR(a.foc)}}</td>
+      <td style="text-align:right;color:#94a3b8">${{a.focBk}}</td>
+      <td style="text-align:right;color:${{corFoc}}">${{dec(focPct, 1)}}%</td>
+      <td style="text-align:right;color:#94a3b8">${{fR(a.cup)}}</td>
+      <td style="text-align:right;font-weight:600">${{fR(a.v - a.foc - a.cup)}}</td>
+    </tr>`;
+  }};
+  tbody.innerHTML = linhas.map(([n, a]) => linha(n, a, false)).join('') + linha('', tot, true);
 }}
 
 function renderVendedores(from, to) {{
