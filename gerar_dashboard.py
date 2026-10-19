@@ -1388,31 +1388,6 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
     <div class="card"><div class="kpi-label">Projeção Mensal</div><div class="kpi-val" id="rk-proj" style="color:var(--amber);font-size:1.2rem">—</div><div class="kpi-delta" id="rk-proj-sub">confirmações estimadas</div></div>
   </div>
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
-    <div class="card">
-      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div style="font-weight:600;font-size:.9rem">Bookings Dia &amp; Fulfilments Dia</div>
-        <div style="display:flex;gap:4px">
-          <button onclick="setRezdyView('dia')"    class="tab-btn active rezdy-view-btn rezdy-view-btn-dia"    style="padding:3px 10px;font-size:.72rem">Dia</button>
-          <button onclick="setRezdyView('semana')" class="tab-btn rezdy-view-btn rezdy-view-btn-semana" style="padding:3px 10px;font-size:.72rem">Semana</button>
-          <button onclick="setRezdyView('mes')"    class="tab-btn rezdy-view-btn rezdy-view-btn-mes"    style="padding:3px 10px;font-size:.72rem">Mês</button>
-        </div>
-      </div>
-      <canvas id="chartRezdyDiario2" height="200"></canvas>
-    </div>
-    <div class="card">
-      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div style="font-weight:600;font-size:.9rem">Receita Diária Confirmada</div>
-        <div style="display:flex;gap:4px">
-          <button onclick="setRezdyView('dia')"    class="tab-btn active rezdy-view-btn rezdy-view-btn-dia"    style="padding:3px 10px;font-size:.72rem">Dia</button>
-          <button onclick="setRezdyView('semana')" class="tab-btn rezdy-view-btn rezdy-view-btn-semana" style="padding:3px 10px;font-size:.72rem">Semana</button>
-          <button onclick="setRezdyView('mes')"    class="tab-btn rezdy-view-btn rezdy-view-btn-mes"    style="padding:3px 10px;font-size:.72rem">Mês</button>
-        </div>
-      </div>
-      <canvas id="chartRezdyReceita" height="200"></canvas>
-    </div>
-  </div>
-
   <!-- Carrinhos Abandonados / On Hold / Outros status por dia -->
   <div class="card mb-5">
     <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -2013,8 +1988,6 @@ function setRezdyView(view) {{
   }});
   const agg = aggregateRezdyDays(_rezdyDays, view);
   buildRezdyDiario('chartRezdyDiario',  agg);
-  buildRezdyDiario('chartRezdyDiario2', agg);
-  buildRezdyReceita('chartRezdyReceita', agg);
   buildRezdyStatusDiario('chartRezdyStatusDiario', agg);
 }}
 
@@ -2481,8 +2454,6 @@ function applyDateRange(from, to, prev, fulfilTo) {{
   _rezdyDays = rDays;
   const rDaysAgg = aggregateRezdyDays(rDays, _rezdyView);
   buildRezdyDiario('chartRezdyDiario', rDaysAgg);
-  buildRezdyDiario('chartRezdyDiario2', rDaysAgg);
-  buildRezdyReceita('chartRezdyReceita', rDaysAgg);
   buildRezdyStatusDiario('chartRezdyStatusDiario', rDaysAgg);
   buildBookingVsFulfilment('chartBookingVsFulfilment', from, to, fTo);
   buildBookingsFonte(from, to);
