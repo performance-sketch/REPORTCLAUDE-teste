@@ -521,9 +521,12 @@
   <div class="card mb-5">
     <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
       <div style="font-weight:600;font-size:.9rem">📅 Quando Reservaram → Para Qual Mês Voaram?</div>
-      <span class="badge badge-gray">linhas = mês da reserva · colunas = mês do voo · cor = volume</span>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="badge badge-gray" id="heatmap-badge">linhas = mês da reserva · colunas = mês do voo · cor = volume</span>
+        <button id="heatmap-toggle" onclick="toggleCard('heatmap-body','heatmap-toggle')" style="background:var(--surface2);border:1px solid var(--border);color:var(--sub);border-radius:6px;padding:4px 12px;font-size:.75rem;cursor:pointer">▲ Minimizar</button>
+      </div>
     </div>
-    <div style="overflow-x:auto">
+    <div id="heatmap-body" style="overflow-x:auto">
       <div id="heatmap-container"></div>
     </div>
   </div>
@@ -531,8 +534,11 @@
   <!-- Público: Top Países -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
     <div class="card">
-      <div style="font-weight:600;font-size:.9rem;margin-bottom:16px">🌍 Público — Top Países</div>
-      <div style="overflow-x:auto">
+      <div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:16px">
+        <div style="font-weight:600;font-size:.9rem">🌍 Público — Top Países</div>
+        <button id="paises-toggle" onclick="toggleCard('paises-body-wrap','paises-toggle')" style="background:var(--surface2);border:1px solid var(--border);color:var(--sub);border-radius:6px;padding:4px 12px;font-size:.75rem;cursor:pointer">▲ Minimizar</button>
+      </div>
+      <div id="paises-body-wrap" style="overflow-x:auto">
         <table>
           <thead><tr>
             <th>País</th>
@@ -546,8 +552,11 @@
       </div>
     </div>
     <div class="card">
-      <div style="font-weight:600;font-size:.9rem;margin-bottom:16px">🏆 Maiores Clientes (por receita)</div>
-      <div style="overflow-x:auto">
+      <div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:16px">
+        <div style="font-weight:600;font-size:.9rem">🏆 Maiores Clientes (por receita)</div>
+        <button id="clientes-toggle" onclick="toggleCard('clientes-body','clientes-toggle')" style="background:var(--surface2);border:1px solid var(--border);color:var(--sub);border-radius:6px;padding:4px 12px;font-size:.75rem;cursor:pointer">▲ Minimizar</button>
+      </div>
+      <div id="clientes-body" style="overflow-x:auto">
         <table>
           <thead><tr>
             <th>Cliente</th>
@@ -1515,6 +1524,7 @@ function applyDateRange(from, to, prev, fulfilTo) {
   renderPaises(from, to);
   renderVendedores(from, to);
   renderVendPerf(from, to);
+  renderHeatmap(from, to);
   renderCupons(from, to);
 
   // ── Range label + títulos dinâmicos ──
@@ -2385,14 +2395,31 @@ function renderVendedores(from, to) {
   }).join('');
 }
 
-function renderHeatmap() {
+function renderHeatmap(from, to) {
   const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  // Matriz montada das reservas CONFIRMED criadas no período selecionado
+  const HEATMAP = {};
+  let totalRes = 0;
+  for (const b of BOOKINGS) {
+    if (b.s !== 'CONFIRMED' || !b.t) continue;
+    if (from && (b.d < from || b.d > to)) continue;
+    const cm = b.d.slice(0,7), tm = b.t.slice(0,7);
+    const row = HEATMAP[cm] || (HEATMAP[cm] = {});
+    row[tm] = (row[tm] || 0) + 1;
+    totalRes++;
+  }
+  const badge = document.getElementById('heatmap-badge');
+  if (badge && from) badge.textContent = `reservas feitas de ${from.slice(8,10)}/${from.slice(5,7)}/${from.slice(2,4)} a ${to.slice(8,10)}/${to.slice(5,7)}/${to.slice(2,4)} · ${totalRes} reservas · linhas = mês da reserva · colunas = mês do voo`;
   const allCreated = Object.keys(HEATMAP).sort();
   // Collect all tour months
   const tourSet = new Set();
   for (const row of Object.values(HEATMAP)) Object.keys(row).forEach(m => tourSet.add(m));
   const allTour = [...tourSet].sort();
-  if (!allCreated.length) return;
+  if (!allCreated.length) {
+    const el = document.getElementById('heatmap-container');
+    if (el) el.innerHTML = '<div style="color:#94a3b8;font-size:.8rem;padding:12px">Nenhuma reserva confirmada no período</div>';
+    return;
+  }
 
   // Max for color scale
   let maxVal = 0;
