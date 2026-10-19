@@ -1432,11 +1432,15 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
         <div style="font-weight:600;font-size:.9rem">Dia da Reserva vs Dia do Voo</div>
         <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
           <span style="display:flex;align-items:center;gap:5px;font-size:.75rem;color:#94a3b8">
-            <span style="display:inline-block;width:12px;height:12px;background:rgba(99,102,241,.65);border-radius:2px"></span>Reservas feitas
+            <span style="display:inline-block;width:12px;height:12px;background:rgba(99,102,241,.65);border-radius:2px"></span><span id="fulfil-leg-book">Reservas feitas (PAX)</span>
           </span>
           <span style="display:flex;align-items:center;gap:5px;font-size:.75rem;color:#94a3b8">
-            <span style="display:inline-block;width:22px;height:2px;background:#06b6d4;border-radius:2px"></span>Voos realizados
+            <span style="display:inline-block;width:22px;height:2px;background:#06b6d4;border-radius:2px"></span><span id="fulfil-leg-fulf">PAX Fulfilments</span>
           </span>
+          <div style="display:flex;gap:4px">
+            <button onclick="setFulfilMetrica('pax')" id="fulfil-btn-pax" class="tab-btn active" style="padding:3px 10px;font-size:.72rem">PAX</button>
+            <button onclick="setFulfilMetrica('bk')"  id="fulfil-btn-bk"  class="tab-btn"        style="padding:3px 10px;font-size:.72rem">Bookings</button>
+          </div>
           <div style="display:flex;gap:4px">
             <button onclick="setFulfilView('dia')"    id="fulfil-btn-dia"    class="tab-btn active" style="padding:3px 10px;font-size:.72rem">Dia</button>
             <button onclick="setFulfilView('semana')" id="fulfil-btn-semana" class="tab-btn"        style="padding:3px 10px;font-size:.72rem">Semana</button>
@@ -2071,6 +2075,16 @@ function setFulfilView(view) {{
   buildBookingVsFulfilment('chartBookingVsFulfilment', _fulfilFrom, _fulfilTo, _fulfilFTo);
 }}
 
+let _fulfilMetrica = 'pax';
+function setFulfilMetrica(m) {{
+  _fulfilMetrica = m;
+  ['pax','bk'].forEach(v => {{
+    const btn = document.getElementById('fulfil-btn-' + v);
+    if (btn) btn.classList.toggle('active', v === m);
+  }});
+  buildBookingVsFulfilment('chartBookingVsFulfilment', _fulfilFrom, _fulfilTo, _fulfilFTo);
+}}
+
 function buildBookingVsFulfilment(canvasId, from, to, fTo) {{
   _fulfilFrom = from; _fulfilTo = to; _fulfilFTo = fTo || to;
   const fimF = _fulfilFTo;
@@ -2091,20 +2105,26 @@ function buildBookingVsFulfilment(canvasId, from, to, fTo) {{
   const fulfMap = {{}};
   for (const b of BOOKINGS) {{
     if (b.s !== 'CONFIRMED') continue;
-    if (b.d >= from && b.d <= to) {{ const k = bucket(b.d); bookMap[k] = (bookMap[k]||0) + 1; }}
-    if (b.t && b.t >= from && b.t <= fimF) {{ const k = bucket(b.t); fulfMap[k] = (fulfMap[k]||0) + 1; }}
+    const n = _fulfilMetrica === 'pax' ? (b.px || 1) : 1;
+    if (b.d >= from && b.d <= to) {{ const k = bucket(b.d); bookMap[k] = (bookMap[k]||0) + n; }}
+    if (b.t && b.t >= from && b.t <= fimF) {{ const k = bucket(b.t); fulfMap[k] = (fulfMap[k]||0) + n; }}
   }}
 
   const keys = [...new Set([...Object.keys(bookMap), ...Object.keys(fulfMap)])].sort();
+  const pax = _fulfilMetrica === 'pax';
+  const lblBook = pax ? 'Reservas feitas (PAX)' : 'Reservas feitas';
+  const lblFulf = pax ? 'PAX Fulfilments' : 'Voos realizados';
+  const lb = document.getElementById('fulfil-leg-book'); if (lb) lb.textContent = lblBook;
+  const lf = document.getElementById('fulfil-leg-fulf'); if (lf) lf.textContent = lblFulf;
 
   makeChart(canvasId, {{
     type: 'bar',
     data: {{
       labels: keys.map(dispLabel),
       datasets: [
-        {{ label:'Reservas feitas', data:keys.map(k=>bookMap[k]||0),
+        {{ label:lblBook, data:keys.map(k=>bookMap[k]||0),
            backgroundColor:'rgba(99,102,241,.65)', borderRadius:3, order:2 }},
-        {{ label:'Voos (fulfilment)', data:keys.map(k=>fulfMap[k]||0),
+        {{ label:lblFulf, data:keys.map(k=>fulfMap[k]||0),
            type:'line', borderColor:'#06b6d4', backgroundColor:'rgba(6,182,212,.12)',
            fill:true, tension:0.4, pointRadius:2, borderWidth:2, order:1 }},
       ]
