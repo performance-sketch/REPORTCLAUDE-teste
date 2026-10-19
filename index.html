@@ -629,7 +629,34 @@
           <tbody id="vend-perf-tbody"></tbody>
         </table>
       </div>
-      <div style="font-size:.7rem;color:var(--sub);margin-top:10px">FOC = pagamentos tipo FREE no Rezdy (cortesias de GoPro/360/SSP, "desconto pra fechar", collabs, upgrades). Vendas = valor bruto da reserva. Líquido = vendas − FOC − cupom.</div>
+      <div class="flex items-center justify-between flex-wrap gap-2" style="margin-top:22px;margin-bottom:8px">
+        <div style="font-weight:600;font-size:.85rem">🎒 Por Extra <span style="font-weight:400;color:var(--sub);font-size:.72rem">— reservas que incluíram cada extra</span></div>
+        <select id="vend-perf-extra-vend" onchange="renderVendPerf(currentFrom, currentTo)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:.8rem">
+          <option value="">Todos vendedores</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>Extra</th>
+            <th style="text-align:right">Unidades</th>
+            <th style="text-align:right">Bookings</th>
+            <th style="text-align:right">PAX</th>
+            <th style="text-align:right">Pax/booking</th>
+            <th style="text-align:right">Vendas</th>
+            <th style="text-align:right">Ticket médio</th>
+            <th style="text-align:right">Extras</th>
+            <th style="text-align:right">Extras/pax</th>
+            <th style="text-align:right">FOC (R$)</th>
+            <th style="text-align:right">Bookings c/ FOC</th>
+            <th style="text-align:right">FOC %</th>
+            <th style="text-align:right">Cupom</th>
+            <th style="text-align:right">Líquido</th>
+          </tr></thead>
+          <tbody id="vend-perf-extra-tbody"></tbody>
+        </table>
+      </div>
+      <div style="font-size:.7rem;color:var(--sub);margin-top:10px">FOC = pagamentos tipo FREE no Rezdy (cortesias de GoPro/360/SSP, "desconto pra fechar", collabs, upgrades). Vendas = valor bruto da reserva. Líquido = vendas − FOC − cupom. Em "Por Extra", Extras = valor só daquele extra e as demais colunas são das reservas inteiras que o incluíram (uma reserva com 2 extras aparece nas 2 linhas, por isso as linhas não somam o total).</div>
     </div>
   </div>
 
@@ -2315,6 +2342,7 @@ function renderVendPerf(from, to) {
   const linhas = Object.entries(ag).sort((a, b) => b[1].v - a[1].v);
   if (!linhas.length) {
     tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#94a3b8;padding:12px">Nenhuma reserva interna no período</td></tr>`;
+    const tbE0 = document.getElementById('vend-perf-extra-tbody'); if (tbE0) tbE0.innerHTML = '';
     return;
   }
   const linhaExtras = a => {
@@ -2347,6 +2375,59 @@ function renderVendPerf(from, to) {
     <tr><td colspan="13" style="padding:2px 12px 10px;border-top:none">${linhaExtras(a)}</td></tr>`;
   };
   tbody.innerHTML = linhas.map(([n, a]) => linha(n, a, false)).join('') + linha('', tot, true);
+
+  // ── Por Extra ──
+  const sel = document.getElementById('vend-perf-extra-vend');
+  const tbE = document.getElementById('vend-perf-extra-tbody');
+  if (!sel || !tbE) return;
+  const atual = sel.value;
+  sel.innerHTML = '<option value="">Todos vendedores</option>' + linhas.map(([n]) =>
+    `<option value="${escHtml(n)}"${n === atual ? ' selected' : ''}>${escHtml(n)}</option>`).join('');
+  const filtroV = linhas.some(([n]) => n === atual) ? atual : '';
+  const porEx = {}, semEx = novo(), totE = novo();
+  const soma = (a, b, exV) => {
+    a.bk++; a.px += (b.px || 1); a.v += b.v; a.ex += exV;
+    a.foc += (b.foc || 0); a.cup += (b.cup || 0);
+    if (b.foc) a.focBk++;
+  };
+  for (const b of BOOKINGS) {
+    if (b.d < from || b.d > to || b.s !== 'CONFIRMED' || !b.vend) continue;
+    if (filtroV && b.vend !== filtroV) continue;
+    soma(totE, b, b.ex || 0);
+    if (!b.exd || !b.exd.length) { soma(semEx, b, 0); continue; }
+    for (const [n, q, val] of b.exd) {
+      const a = porEx[n] || (porEx[n] = Object.assign(novo(), {un:0}));
+      soma(a, b, val); a.un += q;
+    }
+  }
+  const linhaE = (nome, a, un, estilo) => {
+    const focPct = div(a.foc, a.v) * 100;
+    const corFoc = focPct >= 20 ? 'var(--red)' : focPct >= 10 ? 'var(--amber)' : '#94a3b8';
+    return `<tr style="${estilo || ''}">
+      <td style="font-weight:600">${nome}</td>
+      <td style="text-align:right;font-weight:600;color:var(--cyan)">${un}</td>
+      <td style="text-align:right;font-weight:600">${a.bk}</td>
+      <td style="text-align:right;color:#94a3b8">${a.px}</td>
+      <td style="text-align:right">${dec(div(a.px, a.bk), 2)}</td>
+      <td style="text-align:right;font-weight:600;color:#22c55e">${fR(a.v)}</td>
+      <td style="text-align:right">${fR(div(a.v, a.bk))}</td>
+      <td style="text-align:right;color:#94a3b8">${fR(a.ex)}</td>
+      <td style="text-align:right;color:var(--cyan)">${fR(div(a.ex, a.px))}</td>
+      <td style="text-align:right;color:${a.foc ? 'var(--amber)' : '#94a3b8'}">${fR(a.foc)}</td>
+      <td style="text-align:right;color:#94a3b8">${a.focBk}</td>
+      <td style="text-align:right;color:${corFoc}">${dec(focPct, 1)}%</td>
+      <td style="text-align:right;color:#94a3b8">${fR(a.cup)}</td>
+      <td style="text-align:right;font-weight:600">${fR(a.v - a.foc - a.cup)}</td>
+    </tr>`;
+  };
+  const exLinhas = Object.entries(porEx).sort((x, y) => y[1].ex - x[1].ex);
+  if (!totE.bk) {
+    tbE.innerHTML = `<tr><td colspan="14" style="text-align:center;color:#94a3b8;padding:12px">Nenhuma reserva interna no período</td></tr>`;
+    return;
+  }
+  tbE.innerHTML = exLinhas.map(([n, a]) => linhaE(escHtml(n), a, a.un)).join('')
+    + linhaE('<span style="color:#94a3b8">Sem extras</span>', semEx, '—')
+    + linhaE('Total interno', totE, exLinhas.reduce((t, [, a]) => t + a.un, 0), 'font-weight:700;border-top:2px solid var(--border)');
 }
 
 function renderVendedores(from, to) {
