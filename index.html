@@ -405,31 +405,6 @@
 <!-- ═══════════════════════════ REZDY ════════════════════════════════════ -->
 <div id="tab-rezdy" class="tab-content pt-3" style="display:none">
 
-  <!-- Agenda de voos: reservas confirmadas pela data do voo (inclui datas futuras) -->
-  <div class="card mb-5" id="agenda-voos">
-    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-      <div>
-        <div style="font-weight:600;font-size:.9rem">✈️ Agenda de voos <span style="color:var(--sub);font-weight:400">· reservas confirmadas pela data do voo</span></div>
-        <div id="av-sub" style="font-size:.75rem;color:var(--sub);margin-top:2px"></div>
-      </div>
-      <div style="display:flex;gap:4px">
-        <button onclick="setAgendaView('auto')"   id="av-btn-auto"   class="tab-btn active" style="padding:3px 10px;font-size:.72rem">Auto</button>
-        <button onclick="setAgendaView('dia')"    id="av-btn-dia"    class="tab-btn"        style="padding:3px 10px;font-size:.72rem">Dia</button>
-        <button onclick="setAgendaView('semana')" id="av-btn-semana" class="tab-btn"        style="padding:3px 10px;font-size:.72rem">Semana</button>
-        <button onclick="setAgendaView('mes')"    id="av-btn-mes"    class="tab-btn"        style="padding:3px 10px;font-size:.72rem">Mês</button>
-      </div>
-    </div>
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-      <div class="card" style="background:var(--surface2)"><div class="kpi-label">Reservas com voo</div><div class="kpi-val" id="av-reservas" style="color:var(--cyan)">—</div><div class="kpi-delta" id="av-reservas-sub"></div></div>
-      <div class="card" style="background:var(--surface2)"><div class="kpi-label">PAX</div><div class="kpi-val" id="av-pax">—</div><div class="kpi-delta" id="av-pax-sub"></div></div>
-      <div class="card" style="background:var(--surface2)"><div class="kpi-label">Receita reservada</div><div class="kpi-val" id="av-receita" style="color:var(--green);font-size:1.2rem">—</div><div class="kpi-delta">valor das reservas</div></div>
-      <div class="card" style="background:var(--surface2)"><div class="kpi-label">Ticket médio</div><div class="kpi-val" id="av-ticket" style="font-size:1.2rem">—</div><div class="kpi-delta">por reserva</div></div>
-      <div class="card" style="background:var(--surface2)"><div class="kpi-label" id="av-pace-label">vs ano anterior</div><div class="kpi-val" id="av-pace" style="font-size:1.3rem">—</div><div class="kpi-delta" id="av-pace-sub"></div></div>
-    </div>
-    <canvas id="chartAgendaVoos" height="90"></canvas>
-    <div id="av-nota" style="font-size:.72rem;color:var(--sub);margin-top:10px"></div>
-  </div>
-
   <div class="grid grid-cols-2 gap-3 mb-5">
     <div class="card"><div class="kpi-label">Total Reservas</div><div class="kpi-val" id="rk-total">15764</div><div class="kpi-delta" id="rk-total-delta"></div></div>
     <div class="card"><div class="kpi-label">Confirmadas</div><div class="kpi-val" id="rk-conf" style="color:var(--green)">7369</div><div class="kpi-delta" id="rk-conf-delta"></div></div>
@@ -1510,7 +1485,6 @@ function applyDateRange(from, to, prev, fulfilTo) {
   buildRezdyStatusDiario('chartRezdyStatusDiario', rDaysAgg);
   buildBookingVsFulfilment('chartBookingVsFulfilment', from, to, fTo);
   buildBookingsFonte(from, to);
-  renderAgendaVoos(from, to);
 
   // ── Tabelas e gráficos dinâmicos ──
   renderCampanhas(from, to);
