@@ -1381,23 +1381,43 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
     <div id="clima-body">
       <div id="clima-legenda" style="display:flex;gap:12px;flex-wrap:wrap;font-size:.72rem;color:#94a3b8;margin-bottom:10px"></div>
       <div style="position:relative"><canvas id="chartClima" height="110"></canvas></div>
-      <div id="clima-status" style="font-size:.75rem;color:var(--sub);margin-top:8px"></div>
-      <div style="font-weight:600;font-size:.85rem;margin:18px 0 8px">Operação por status de chuva <span style="font-weight:400;color:var(--sub);font-size:.72rem">— dias até hoje; previsão fica fora da média</span></div>
+      <div class="flex items-center justify-between flex-wrap gap-2" style="margin:22px 0 10px">
+        <div style="font-weight:600;font-size:.9rem">📉 Impacto da chuva em bookings e voos</div>
+        <div style="display:flex;gap:4px">
+          <button onclick="setClimaBase('periodo')"   id="clima-base-periodo"   class="tab-btn active" style="padding:3px 10px;font-size:.72rem">Período selecionado</button>
+          <button onclick="setClimaBase('historico')" id="clima-base-historico" class="tab-btn"        style="padding:3px 10px;font-size:.72rem">Histórico desde jan/25</button>
+        </div>
+      </div>
+      <div id="clima-insights" class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4"></div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <div>
+          <div style="font-size:.78rem;color:#94a3b8;margin-bottom:6px">Média por dia, por status de chuva</div>
+          <canvas id="chartClimaStatus" height="200"></canvas>
+        </div>
+        <div>
+          <div style="font-size:.78rem;color:#94a3b8;margin-bottom:6px" id="clima-scatter-title">Cada ponto = 1 dia · chuva (mm) × voos do dia</div>
+          <canvas id="chartClimaScatter" height="200"></canvas>
+        </div>
+      </div>
       <div style="overflow-x:auto">
         <table>
           <thead><tr>
             <th>Status</th>
             <th style="text-align:right">Dias</th>
             <th style="text-align:right">Chuva média</th>
-            <th style="text-align:right">Nuvens média</th>
+            <th style="text-align:right">Nuvens</th>
             <th style="text-align:right" id="clima-th-bk">Bookings / dia</th>
+            <th style="text-align:right">vs seco</th>
+            <th style="text-align:right">vs mesmo dia da semana</th>
             <th style="text-align:right" id="clima-th-ff">Fulfilments / dia</th>
-            <th style="text-align:right">vs dia seco</th>
+            <th style="text-align:right">vs seco</th>
+            <th style="text-align:right">vs mesmo dia da semana</th>
             <th style="text-align:right">Dias sem voo</th>
           </tr></thead>
           <tbody id="clima-tbody"></tbody>
         </table>
       </div>
+      <div id="clima-status" style="font-size:.72rem;color:var(--sub);margin-top:8px"></div>
       <div style="font-size:.7rem;color:var(--sub);margin-top:10px">Status do dia pelo maior volume de chuva em 1 hora: Seco = 0 mm · Traço &lt; 0,5 mm/h · Fraca &lt; 1 mm/h · Moderada &lt; 2 mm/h · Forte ≥ 2 mm/h. Bookings pela data da reserva; fulfilments pela data do voo (reservas confirmadas). Clima: Open-Meteo, Lagoa (−22,97, −43,21).</div>
     </div>
   </div>
@@ -3235,7 +3255,12 @@ const CLIMA_STATUS = [
   {{k:'Forte',    cor:'rgba(30,64,175,.95)'}},
 ];
 const _climaCache = {{}};
-let _climaMetrica = 'bk', _climaFrom = '', _climaTo = '';
+let _climaMetrica = 'bk', _climaFrom = '', _climaTo = '', _climaBase = 'periodo';
+function setClimaBase(b) {{
+  _climaBase = b;
+  ['periodo','historico'].forEach(v => {{ const e = document.getElementById('clima-base-' + v); if (e) e.classList.toggle('active', v === b); }});
+  renderClima(_climaFrom, _climaTo);
+}}
 function climaStatus(mm, maxH) {{
   if (!mm) return 'Seco';
   if (maxH < 0.5) return 'Traço';
@@ -3334,38 +3359,129 @@ async function renderClima(from, to) {{
     }}
   }});
 
-  // Resumo por status (só dias até hoje)
   const passados = dias.filter(d => d <= HOJE && clima[d]);
   const prev = dias.filter(d => clima[d] && clima[d].prev).length;
   const mmTot = passados.reduce((t, d) => t + clima[d].mm, 0);
   const chuvosos = passados.filter(d => ['Moderada','Forte'].includes(clima[d].st)).length;
   setText('clima-sub', `Chuva na Lagoa (Open-Meteo): ${{mmTot.toLocaleString('pt-BR', {{maximumFractionDigits:1}})}} mm em ${{passados.length}} dias · ${{chuvosos}} dias de chuva moderada/forte` + (prev ? ` · ${{prev}} dias de previsão (borda laranja)` : ''));
-  const g = {{}};
-  for (const d of passados) {{
-    const c = clima[d], a = g[c.st] || (g[c.st] = {{dias:0, mm:0, nuv:0, bk:0, ff:0, zero:0}});
-    a.dias++; a.mm += c.mm; a.nuv += c.nuv || 0; a.bk += bookMap[d] || 0; a.ff += fulfMap[d] || 0;
-    if (!fulfMap[d]) a.zero++;
+  await renderClimaImpacto(pax, n);
+}}
+
+async function renderClimaImpacto(pax, n) {{
+  // Base: período do calendário ou histórico completo; hoje fica de fora (dia incompleto)
+  const ontem = (() => {{ const x = new Date(HOJE + 'T12:00:00'); x.setDate(x.getDate() - 1); return x.toISOString().slice(0,10); }})();
+  const ini = _climaBase === 'historico' ? '2025-01-01' : _climaFrom;
+  const fim = _climaBase === 'historico' ? ontem : (_climaTo < ontem ? _climaTo : ontem);
+  const tb = document.getElementById('clima-tbody');
+  if (ini > fim) {{ tb.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#94a3b8;padding:12px">Sem dias passados no período</td></tr>`; return; }}
+  let clima;
+  try {{ clima = await buscarClima(ini, fim); }} catch (e) {{ setText('clima-status', 'Não foi possível carregar o histórico de chuva agora.'); return; }}
+  const bk = {{}}, ff = {{}};
+  for (const b of BOOKINGS) {{
+    if (b.s !== 'CONFIRMED') continue;
+    if (b.d >= ini && b.d <= fim) bk[b.d] = (bk[b.d] || 0) + n(b);
+    if (b.t && b.t >= ini && b.t <= fim) ff[b.t] = (ff[b.t] || 0) + n(b);
   }}
-  const seco = ['Seco','Traço'].reduce((a, k) => {{ const x = g[k]; if (x) {{ a.dias += x.dias; a.ff += x.ff; }} return a; }}, {{dias:0, ff:0}});
-  const ffSeco = seco.dias ? seco.ff / seco.dias : 0;
+  const dias = [];
+  for (let d = new Date(ini + 'T12:00:00'); d.toISOString().slice(0,10) <= fim; d.setDate(d.getDate() + 1)) {{
+    const k = d.toISOString().slice(0,10);
+    if (clima[k]) dias.push({{d:k, dow:d.getDay(), c:clima[k], bk:bk[k] || 0, ff:ff[k] || 0}});
+  }}
+  // média por dia da semana (controle de sazonalidade semanal)
+  const dowM = [0,1,2,3,4,5,6].map(w => {{ const x = dias.filter(r => r.dow === w); return {{bk: x.reduce((t, r) => t + r.bk, 0) / (x.length || 1), ff: x.reduce((t, r) => t + r.ff, 0) / (x.length || 1)}}; }});
+  const g = {{}};
+  for (const r of dias) {{
+    const a = g[r.c.st] || (g[r.c.st] = {{dias:0, mm:0, nuv:0, bk:0, ff:0, zero:0, rbk:0, rff:0, nbk:0, nff:0}});
+    a.dias++; a.mm += r.c.mm; a.nuv += r.c.nuv || 0; a.bk += r.bk; a.ff += r.ff;
+    if (!r.ff) a.zero++;
+    if (dowM[r.dow].bk) {{ a.rbk += r.bk / dowM[r.dow].bk; a.nbk++; }}
+    if (dowM[r.dow].ff) {{ a.rff += r.ff / dowM[r.dow].ff; a.nff++; }}
+  }}
+  const secos = dias.filter(r => ['Seco','Traço'].includes(r.c.st));
+  const base = {{bk: secos.reduce((t, r) => t + r.bk, 0) / (secos.length || 1), ff: secos.reduce((t, r) => t + r.ff, 0) / (secos.length || 1)}};
   const dec1 = v => v.toLocaleString('pt-BR', {{minimumFractionDigits:1, maximumFractionDigits:1}});
-  const linhas = CLIMA_STATUS.filter(x => g[x.k]).map(x => {{
-    const a = g[x.k], ffd = a.ff / a.dias;
-    const vs = ffSeco && !['Seco','Traço'].includes(x.k) ? (ffd / ffSeco - 1) * 100 : null;
+  const pctTxt = v => v == null || !isFinite(v) ? '—' : (v > 0 ? '+' : '') + Math.round(v) + '%';
+  const pctCor = v => v == null || !isFinite(v) ? '#94a3b8' : v < -5 ? 'var(--red)' : v > 5 ? 'var(--green)' : '#94a3b8';
+  const st = CLIMA_STATUS.filter(x => g[x.k]);
+  const linha = x => {{
+    const a = g[x.k], bkd = a.bk / a.dias, ffd = a.ff / a.dias, eSeco = ['Seco','Traço'].includes(x.k);
+    const vb = eSeco ? null : (bkd / base.bk - 1) * 100, vf = eSeco ? null : (ffd / base.ff - 1) * 100;
+    const wb = a.nbk ? (a.rbk / a.nbk - 1) * 100 : null, wf = a.nff ? (a.rff / a.nff - 1) * 100 : null;
     return `<tr>
       <td><span style="display:inline-block;width:10px;height:10px;background:${{x.cor}};border-radius:2px;margin-right:6px"></span>${{x.k}}</td>
       <td style="text-align:right">${{a.dias}}</td>
       <td style="text-align:right">${{dec1(a.mm / a.dias)}} mm</td>
       <td style="text-align:right;color:#94a3b8">${{Math.round(a.nuv / a.dias)}}%</td>
-      <td style="text-align:right">${{dec1(a.bk / a.dias)}}</td>
+      <td style="text-align:right">${{dec1(bkd)}}</td>
+      <td style="text-align:right;color:${{pctCor(vb)}}">${{eSeco ? 'base' : pctTxt(vb)}}</td>
+      <td style="text-align:right;color:${{pctCor(wb)}}">${{pctTxt(wb)}}</td>
       <td style="text-align:right;font-weight:600;color:var(--cyan)">${{dec1(ffd)}}</td>
-      <td style="text-align:right;color:${{vs == null ? '#94a3b8' : vs < 0 ? 'var(--red)' : 'var(--green)'}}">${{vs == null ? 'base' : (vs > 0 ? '+' : '') + Math.round(vs) + '%'}}</td>
-      <td style="text-align:right;color:${{a.zero ? 'var(--amber)' : '#94a3b8'}}">${{a.zero}}</td>
+      <td style="text-align:right;color:${{pctCor(vf)}}">${{eSeco ? 'base' : pctTxt(vf)}}</td>
+      <td style="text-align:right;color:${{pctCor(wf)}}">${{pctTxt(wf)}}</td>
+      <td style="text-align:right;color:${{a.zero ? 'var(--amber)' : '#94a3b8'}}">${{a.zero}} (${{Math.round(a.zero / a.dias * 100)}}%)</td>
     </tr>`;
+  }};
+  tb.innerHTML = st.map(linha).join('');
+
+  // Correlação (Pearson) chuva × bookings / voos
+  const pearson = (xs, ys) => {{
+    const k = xs.length; if (k < 3) return null;
+    const mx = xs.reduce((a, b) => a + b, 0) / k, my = ys.reduce((a, b) => a + b, 0) / k;
+    let sxy = 0, sxx = 0, syy = 0;
+    for (let i = 0; i < k; i++) {{ sxy += (xs[i]-mx)*(ys[i]-my); sxx += (xs[i]-mx)**2; syy += (ys[i]-my)**2; }}
+    return sxx && syy ? sxy / Math.sqrt(sxx * syy) : null;
+  }};
+  const mm = dias.map(r => r.c.mm);
+  const rBk = pearson(mm, dias.map(r => r.bk)), rFf = pearson(mm, dias.map(r => r.ff));
+  const forte = g['Forte'], ffF = forte ? forte.ff / forte.dias : null, bkF = forte ? forte.bk / forte.dias : null;
+  const chuva = dias.filter(r => ['Moderada','Forte'].includes(r.c.st));
+  const ffChuva = chuva.length ? chuva.reduce((t, r) => t + r.ff, 0) / chuva.length : null;
+  const bkChuva = chuva.length ? chuva.reduce((t, r) => t + r.bk, 0) / chuva.length : null;
+  const perdaVoos = ffChuva != null ? (base.ff - ffChuva) * chuva.length : null;
+  const rTxt = r => r == null ? '—' : r.toLocaleString('pt-BR', {{maximumFractionDigits:2, minimumFractionDigits:2}});
+  const rLeit = r => r == null ? '' : Math.abs(r) < 0.1 ? 'sem relação' : Math.abs(r) < 0.3 ? (r < 0 ? 'relação fraca negativa' : 'relação fraca positiva') : Math.abs(r) < 0.5 ? (r < 0 ? 'relação moderada negativa' : 'relação moderada positiva') : (r < 0 ? 'relação forte negativa' : 'relação forte positiva');
+  const card = (lbl, val, sub, cor) => `<div class="card" style="background:var(--surface2)"><div class="kpi-label">${{lbl}}</div><div class="kpi-val" style="font-size:1.25rem;color:${{cor || 'var(--text)'}}">${{val}}</div><div class="kpi-delta">${{sub}}</div></div>`;
+  document.getElementById('clima-insights').innerHTML =
+    card('Voos em dia de chuva forte', ffF == null ? '—' : pctTxt((ffF / base.ff - 1) * 100), ffF == null ? 'sem dias de chuva forte' : `${{dec1(ffF)}} ${{pax ? 'PAX' : 'voos'}}/dia vs ${{dec1(base.ff)}} em dia seco`, ffF != null && ffF < base.ff ? 'var(--red)' : 'var(--green)') +
+    card('Bookings em dia de chuva forte', bkF == null ? '—' : pctTxt((bkF / base.bk - 1) * 100), bkF == null ? 'sem dias de chuva forte' : `${{dec1(bkF)}}/dia vs ${{dec1(base.bk)}} em dia seco`, bkF != null && bkF < base.bk ? 'var(--red)' : 'var(--green)') +
+    card('Correlação chuva × voos', rTxt(rFf), `${{rLeit(rFf)}} · bookings: ${{rTxt(rBk)}} (${{rLeit(rBk)}})`, 'var(--cyan)') +
+    card(`${{pax ? 'PAX' : 'Voos'}} a menos com chuva`, perdaVoos == null ? '—' : fN(Math.max(0, perdaVoos)), `em ${{chuva.length}} dias de chuva moderada/forte (vs média de dia seco)`, 'var(--amber)');
+
+  makeChart('chartClimaStatus', {{
+    type: 'bar',
+    data: {{
+      labels: st.map(x => x.k),
+      datasets: [
+        {{ label: pax ? 'PAX reservados / dia' : 'Bookings / dia', data: st.map(x => +(g[x.k].bk / g[x.k].dias).toFixed(2)), backgroundColor:'rgba(99,102,241,.7)', borderRadius:3 }},
+        {{ label: pax ? 'PAX voados / dia' : 'Fulfilments / dia', data: st.map(x => +(g[x.k].ff / g[x.k].dias).toFixed(2)), backgroundColor:'rgba(6,182,212,.75)', borderRadius:3 }},
+      ]
+    }},
+    options: {{ responsive:true, plugins:{{legend:{{labels:{{color:'#94a3b8', boxWidth:10}}}},
+      tooltip:{{callbacks:{{footer: it => `${{g[st[it[0].dataIndex].k].dias}} dias`}}}}}},
+      scales:{{ x:{{grid:{{display:false}}}}, y:{{beginAtZero:true, grid:{{color:'rgba(51,65,85,.4)'}}}} }} }}
   }});
-  document.getElementById('clima-tbody').innerHTML = linhas.join('') ||
-    `<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:12px">Sem dias passados no período</td></tr>`;
-  setText('clima-status', ffSeco ? `Base "dia seco" = Seco + Traço: ${{dec1(ffSeco)}} ${{pax ? 'PAX voados' : 'fulfilments'}} por dia.` : '');
+
+  // Dispersão + tendência linear
+  const xs = mm, ys = dias.map(r => r.ff);
+  const k = xs.length, mx = xs.reduce((a, b) => a + b, 0) / (k || 1), my = ys.reduce((a, b) => a + b, 0) / (k || 1);
+  let sxy = 0, sxx = 0; for (let i = 0; i < k; i++) {{ sxy += (xs[i]-mx)*(ys[i]-my); sxx += (xs[i]-mx)**2; }}
+  const slope = sxx ? sxy / sxx : 0, icpt = my - slope * mx, xMax = Math.max(1, ...xs);
+  setText('clima-scatter-title', `Cada ponto = 1 dia · chuva (mm) × ${{pax ? 'PAX voados' : 'voos'}} do dia · tendência: ${{slope >= 0 ? '+' : ''}}${{(slope * 10).toLocaleString('pt-BR', {{maximumFractionDigits:1}})}} a cada 10 mm`);
+  const corSt = stt => (CLIMA_STATUS.find(x => x.k === stt) || CLIMA_STATUS[0]).cor;
+  makeChart('chartClimaScatter', {{
+    type: 'scatter',
+    data: {{ datasets: [
+      {{ label:'Dias', data: dias.map(r => ({{x:r.c.mm, y:r.ff, d:r.d, st:r.c.st, bk:r.bk}})), pointRadius:3.5,
+         backgroundColor: dias.map(r => r.c.st === 'Seco' ? 'rgba(148,163,184,.6)' : corSt(r.c.st)) }},
+      {{ label:'Tendência', type:'line', data:[{{x:0, y:icpt}}, {{x:xMax, y:icpt + slope * xMax}}], borderColor:'#f59e0b', borderWidth:2, borderDash:[6,4], pointRadius:0 }},
+    ]}},
+    options: {{ responsive:true, plugins:{{legend:{{display:false}},
+      tooltip:{{callbacks:{{label: c => c.raw.d ? ` ${{c.raw.d.slice(8,10)}}/${{c.raw.d.slice(5,7)}}/${{c.raw.d.slice(2,4)}} · ${{c.raw.st}} · ${{c.raw.x.toLocaleString('pt-BR')}} mm · ${{c.raw.y}} ${{pax ? 'PAX voados' : 'voos'}} · ${{c.raw.bk}} ${{pax ? 'PAX reservados' : 'bookings'}}` : ' Tendência'}}}}}},
+      scales:{{ x:{{title:{{display:true, text:'Chuva no dia (mm)'}}, beginAtZero:true, grid:{{color:'rgba(51,65,85,.3)'}}}},
+               y:{{title:{{display:true, text: pax ? 'PAX voados' : 'Voos (fulfilments)'}}, beginAtZero:true, grid:{{color:'rgba(51,65,85,.3)'}}}} }} }}
+  }});
+  const fmtD = d => d.slice(8,10) + '/' + d.slice(5,7) + '/' + d.slice(2,4);
+  setText('clima-status', `Base: ${{dias.length}} dias (${{fmtD(ini)}} a ${{fmtD(fim)}}; hoje fica de fora por estar incompleto). "Dia seco" = Seco + Traço: ${{dec1(base.bk)}} ${{pax ? 'PAX reservados' : 'bookings'}} e ${{dec1(base.ff)}} ${{pax ? 'PAX voados' : 'voos'}} por dia. "vs mesmo dia da semana" compara cada dia com a média do mesmo dia da semana na base, para tirar o efeito de fim de semana. Correlação não prova causa: temporada, feriados e campanhas também mexem nos números.`);
 }}
 
 function toggleVendPerf(forcar) {{
