@@ -3620,7 +3620,7 @@ window.__vrFp = flatpickr("#date-range", {{
 populateVendedorFilter();
 popularMeses();
 applyDateRange(D30_FROM, HOJE);
-renderHeatmap();
+// renderHeatmap é chamado no refresh do período (segue o calendário)
 
 // ─── Instagram init ───────────────────────────────────────────────────────────
 function _fN2(v) {{
