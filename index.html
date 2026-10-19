@@ -442,16 +442,6 @@
         </div>
       </div>
       <div id="clima-insights" class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4"></div>
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <div>
-          <div style="font-size:.78rem;color:#94a3b8;margin-bottom:6px">Média por dia, por status de chuva</div>
-          <canvas id="chartClimaStatus" height="200"></canvas>
-        </div>
-        <div>
-          <div style="font-size:.78rem;color:#94a3b8;margin-bottom:6px" id="clima-scatter-title">Cada ponto = 1 dia · chuva (mm) × voos do dia</div>
-          <canvas id="chartClimaScatter" height="200"></canvas>
-        </div>
-      </div>
       <div style="overflow-x:auto">
         <table>
           <thead><tr>
@@ -2500,39 +2490,6 @@ async function renderClimaImpacto(pax, n) {
     card('Correlação chuva × voos', rTxt(rFf), `${rLeit(rFf)} · bookings: ${rTxt(rBk)} (${rLeit(rBk)})`, 'var(--cyan)') +
     card(`${pax ? 'PAX' : 'Voos'} a menos com chuva`, perdaVoos == null ? '—' : fN(Math.max(0, perdaVoos)), `em ${chuva.length} dias de chuva moderada/forte (vs média de dia seco)`, 'var(--amber)');
 
-  makeChart('chartClimaStatus', {
-    type: 'bar',
-    data: {
-      labels: st.map(x => x.k),
-      datasets: [
-        { label: pax ? 'PAX reservados / dia' : 'Bookings / dia', data: st.map(x => +(g[x.k].bk / g[x.k].dias).toFixed(2)), backgroundColor:'rgba(99,102,241,.7)', borderRadius:3 },
-        { label: pax ? 'PAX voados / dia' : 'Fulfilments / dia', data: st.map(x => +(g[x.k].ff / g[x.k].dias).toFixed(2)), backgroundColor:'rgba(6,182,212,.75)', borderRadius:3 },
-      ]
-    },
-    options: { responsive:true, plugins:{legend:{labels:{color:'#94a3b8', boxWidth:10}},
-      tooltip:{callbacks:{footer: it => `${g[st[it[0].dataIndex].k].dias} dias`}}},
-      scales:{ x:{grid:{display:false}}, y:{beginAtZero:true, grid:{color:'rgba(51,65,85,.4)'}} } }
-  });
-
-  // Dispersão + tendência linear
-  const xs = mm, ys = dias.map(r => r.ff);
-  const k = xs.length, mx = xs.reduce((a, b) => a + b, 0) / (k || 1), my = ys.reduce((a, b) => a + b, 0) / (k || 1);
-  let sxy = 0, sxx = 0; for (let i = 0; i < k; i++) { sxy += (xs[i]-mx)*(ys[i]-my); sxx += (xs[i]-mx)**2; }
-  const slope = sxx ? sxy / sxx : 0, icpt = my - slope * mx, xMax = Math.max(1, ...xs);
-  setText('clima-scatter-title', `Cada ponto = 1 dia · chuva (mm) × ${pax ? 'PAX voados' : 'voos'} do dia · tendência: ${slope >= 0 ? '+' : ''}${(slope * 10).toLocaleString('pt-BR', {maximumFractionDigits:1})} a cada 10 mm`);
-  const corSt = stt => (CLIMA_STATUS.find(x => x.k === stt) || CLIMA_STATUS[0]).cor;
-  makeChart('chartClimaScatter', {
-    type: 'scatter',
-    data: { datasets: [
-      { label:'Dias', data: dias.map(r => ({x:r.c.mm, y:r.ff, d:r.d, st:r.c.st, bk:r.bk})), pointRadius:3.5,
-         backgroundColor: dias.map(r => r.c.st === 'Seco' ? 'rgba(148,163,184,.6)' : corSt(r.c.st)) },
-      { label:'Tendência', type:'line', data:[{x:0, y:Math.max(0, icpt)}, {x:(slope < 0 && icpt + slope * xMax < 0) ? -icpt / slope : xMax, y:Math.max(0, icpt + slope * xMax)}], borderColor:'#f59e0b', borderWidth:2, borderDash:[6,4], pointRadius:0 },
-    ]},
-    options: { responsive:true, plugins:{legend:{display:false},
-      tooltip:{callbacks:{label: c => c.raw.d ? ` ${c.raw.d.slice(8,10)}/${c.raw.d.slice(5,7)}/${c.raw.d.slice(2,4)} · ${c.raw.st} · ${c.raw.x.toLocaleString('pt-BR')} mm · ${c.raw.y} ${pax ? 'PAX voados' : 'voos'} · ${c.raw.bk} ${pax ? 'PAX reservados' : 'bookings'}` : ' Tendência'}}},
-      scales:{ x:{title:{display:true, text:'Chuva no dia (mm)'}, beginAtZero:true, grid:{color:'rgba(51,65,85,.3)'}},
-               y:{title:{display:true, text: pax ? 'PAX voados' : 'Voos (fulfilments)'}, min:0, beginAtZero:true, grid:{color:'rgba(51,65,85,.3)'}} } }
-  });
   const fmtD = d => d.slice(8,10) + '/' + d.slice(5,7) + '/' + d.slice(2,4);
   setText('clima-status', `Base: ${dias.length} dias (${fmtD(ini)} a ${fmtD(fim)}; hoje fica de fora por estar incompleto). "Dia seco" = Seco + Traço: ${dec1(base.bk)} ${pax ? 'PAX reservados' : 'bookings'} e ${dec1(base.ff)} ${pax ? 'PAX voados' : 'voos'} por dia. "vs mesmo dia da semana" compara cada dia com a média do mesmo dia da semana na base, para tirar o efeito de fim de semana. Correlação não prova causa: temporada, feriados e campanhas também mexem nos números.`);
 }
