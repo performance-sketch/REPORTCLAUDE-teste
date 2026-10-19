@@ -459,10 +459,10 @@
             <th style="text-align:right">Chuva média</th>
             <th style="text-align:right">Nuvens</th>
             <th style="text-align:right" id="clima-th-bk">Bookings / dia</th>
-            <th style="text-align:right">vs seco</th>
+            <th style="text-align:right">vs sem chuva</th>
             <th style="text-align:right">vs mesmo dia da semana</th>
             <th style="text-align:right" id="clima-th-ff">Fulfilments / dia</th>
-            <th style="text-align:right">vs seco</th>
+            <th style="text-align:right">vs sem chuva</th>
             <th style="text-align:right">vs mesmo dia da semana</th>
             <th style="text-align:right">Dias sem voo</th>
           </tr></thead>
@@ -2396,8 +2396,8 @@ async function renderClima(from, to) {
   const passados = dias.filter(d => d <= HOJE && clima[d]);
   const prev = dias.filter(d => clima[d] && clima[d].prev).length;
   const mmTot = passados.reduce((t, d) => t + clima[d].mm, 0);
-  const chuvosos = passados.filter(d => ['Moderada','Forte'].includes(clima[d].st)).length;
-  setText('clima-sub', `Chuva na Lagoa (Open-Meteo): ${mmTot.toLocaleString('pt-BR', {maximumFractionDigits:1})} mm em ${passados.length} dias · ${chuvosos} dias de chuva moderada/forte` + (prev ? ` · ${prev} dias de previsão (borda laranja)` : ''));
+  const chuvosos = passados.filter(d => ['Fraca','Moderada','Forte'].includes(clima[d].st)).length;
+  setText('clima-sub', `Chuva na Lagoa (Open-Meteo): ${mmTot.toLocaleString('pt-BR', {maximumFractionDigits:1})} mm em ${passados.length} dias · ${chuvosos} dias de chuva (fraca, moderada ou forte)` + (prev ? ` · ${prev} dias de previsão (ponto laranja)` : ''));
   await renderClimaImpacto(pax, n);
 }
 
@@ -2415,8 +2415,8 @@ function drawClimaChart() {
   const qtd = k => dias.filter(d => clima[d] && clima[d].st === k).length;
   document.getElementById('clima-legenda').innerHTML =
     chip(_climaSeries.bk, "climaToggleSerie('bk')", '<i style="display:inline-block;width:10px;height:10px;background:rgba(99,102,241,.65);border-radius:2px"></i>', lblBk) +
-    chip(_climaSeries.ff, "climaToggleSerie('ff')", '<i style="display:inline-block;width:16px;height:2px;background:#06b6d4"></i>', lblFf) +
-    chip(_climaSeries.chuva, "climaToggleSerie('chuva')", '<i style="display:inline-block;width:10px;height:10px;background:linear-gradient(90deg,rgba(125,211,252,.8),rgba(30,64,175,.95));border-radius:2px"></i>', 'Chuva (mm)') +
+    chip(_climaSeries.ff, "climaToggleSerie('ff')", '<i style="display:inline-block;width:10px;height:10px;background:rgba(6,182,212,.75);border-radius:2px"></i>', lblFf) +
+    chip(_climaSeries.chuva, "climaToggleSerie('chuva')", '<i style="display:inline-block;width:16px;height:2px;background:#93c5fd"></i>', 'Chuva (mm)') +
     '<span style="width:1px;background:var(--border);margin:0 2px"></span>' +
     CLIMA_STATUS.map(x => chip(_climaSt.has(x.k), `climaToggleStatus('${x.k}')`, `<i style="display:inline-block;width:10px;height:10px;background:${x.cor};border-radius:2px"></i>`, `${x.k} (${qtd(x.k)})`)).join('') +
     `<span style="align-self:center;margin-left:4px">${nVis} de ${dias.length} dias</span>`;
@@ -2425,12 +2425,13 @@ function drawClimaChart() {
     data: {
       labels: dias.map(d => fAxis(d)),
       datasets: [
-        { label:lblBk, hidden:!_climaSeries.bk, data:dias.map(d => vis(d) ? (bookMap[d] || 0) : null), backgroundColor:'rgba(99,102,241,.65)', borderRadius:3, yAxisID:'y', order:2 },
-        { label:lblFf, hidden:!_climaSeries.ff, data:dias.map(d => vis(d) ? (fulfMap[d] || 0) : null), type:'line', borderColor:'#06b6d4', backgroundColor:'#06b6d4',
-           tension:0.35, pointRadius:3, pointHoverRadius:6, borderWidth:2, spanGaps:false, yAxisID:'y', order:1 },
-        { label:'Chuva (mm)', hidden:!_climaSeries.chuva, data:dias.map(d => clima[d] && vis(d) ? clima[d].mm : null), yAxisID:'y1', order:3, borderRadius:2,
-           backgroundColor:dias.map(d => clima[d] ? cor(clima[d].st) : 'transparent'),
-           borderColor:dias.map(d => clima[d] && clima[d].prev ? '#f59e0b' : 'transparent'), borderWidth:dias.map(d => clima[d] && clima[d].prev ? 1 : 0) },
+        { label:lblBk, hidden:!_climaSeries.bk, data:dias.map(d => vis(d) ? (bookMap[d] || 0) : null), backgroundColor:'rgba(99,102,241,.7)', borderRadius:3, yAxisID:'y', order:2 },
+        { label:lblFf, hidden:!_climaSeries.ff, data:dias.map(d => vis(d) ? (fulfMap[d] || 0) : null), backgroundColor:'rgba(6,182,212,.75)', borderRadius:3, yAxisID:'y', order:2 },
+        { label:'Chuva (mm)', hidden:!_climaSeries.chuva, type:'line', data:dias.map(d => clima[d] && vis(d) ? clima[d].mm : null), yAxisID:'y1', order:1,
+           borderColor:'#93c5fd', backgroundColor:'rgba(147,197,253,.12)', fill:true, tension:0.3, borderWidth:2, spanGaps:false,
+           pointRadius:dias.map(d => clima[d] && clima[d].mm ? 3.5 : 2), pointHoverRadius:6,
+           pointBackgroundColor:dias.map(d => clima[d] ? cor(clima[d].st) : 'transparent'),
+           pointBorderColor:dias.map(d => clima[d] && clima[d].prev ? '#f59e0b' : '#93c5fd'), pointBorderWidth:dias.map(d => clima[d] && clima[d].prev ? 2 : 1) },
       ]
     },
     options: {
@@ -2522,7 +2523,7 @@ async function renderClimaImpacto(pax, n) {
   const pctCor = v => v == null || !isFinite(v) ? '#94a3b8' : v < -5 ? 'var(--red)' : v > 5 ? 'var(--green)' : '#94a3b8';
   const st = CLIMA_STATUS.filter(x => g[x.k]);
   const linha = x => {
-    const a = g[x.k], bkd = a.bk / a.dias, ffd = a.ff / a.dias, eSeco = ['Seco','Traço'].includes(x.k);
+    const a = g[x.k], bkd = a.bk / a.dias, ffd = a.ff / a.dias, eSeco = ['Seco','Traço','Sem chuva'].includes(x.k);
     const vb = eSeco ? null : (bkd / base.bk - 1) * 100, vf = eSeco ? null : (ffd / base.ff - 1) * 100;
     const wb = a.nbk ? (a.rbk / a.nbk - 1) * 100 : null, wf = a.nff ? (a.rff / a.nff - 1) * 100 : null;
     return `<tr>
@@ -2539,7 +2540,11 @@ async function renderClimaImpacto(pax, n) {
       <td style="text-align:right;color:${a.zero ? 'var(--amber)' : '#94a3b8'}">${a.zero} (${Math.round(a.zero / a.dias * 100)}%)</td>
     </tr>`;
   };
-  tb.innerHTML = st.map(linha).join('');
+  const juntar = ks => ks.reduce((t, k) => { const a = g[k]; if (a) for (const c in t) t[c] += a[c]; return t; }, {dias:0, mm:0, nuv:0, bk:0, ff:0, zero:0, rbk:0, rff:0, nbk:0, nff:0});
+  g['Sem chuva'] = juntar(['Seco','Traço']);
+  g['Chuva'] = juntar(['Fraca','Moderada','Forte']);
+  const totais = [{k:'Sem chuva', cor:'rgba(148,163,184,.45)'}, {k:'Chuva', cor:'rgba(59,130,246,.9)'}].filter(x => g[x.k].dias);
+  tb.innerHTML = st.map(linha).join('') + totais.map((x, i) => linha(x).replace('<tr>', `<tr style="font-weight:700;${i ? '' : 'border-top:2px solid var(--border);'}">`)).join('');
 
   // Correlação (Pearson) chuva × bookings / voos
   const pearson = (xs, ys) => {
@@ -2551,8 +2556,7 @@ async function renderClimaImpacto(pax, n) {
   };
   const mm = dias.map(r => r.c.mm);
   const rBk = pearson(mm, dias.map(r => r.bk)), rFf = pearson(mm, dias.map(r => r.ff));
-  const forte = g['Forte'], ffF = forte ? forte.ff / forte.dias : null, bkF = forte ? forte.bk / forte.dias : null;
-  const chuva = dias.filter(r => ['Moderada','Forte'].includes(r.c.st));
+  const chuva = dias.filter(r => ['Fraca','Moderada','Forte'].includes(r.c.st));
   const ffChuva = chuva.length ? chuva.reduce((t, r) => t + r.ff, 0) / chuva.length : null;
   const bkChuva = chuva.length ? chuva.reduce((t, r) => t + r.bk, 0) / chuva.length : null;
   const perdaVoos = ffChuva != null ? (base.ff - ffChuva) * chuva.length : null;
@@ -2560,13 +2564,13 @@ async function renderClimaImpacto(pax, n) {
   const rLeit = r => r == null ? '' : Math.abs(r) < 0.1 ? 'sem relação' : Math.abs(r) < 0.3 ? (r < 0 ? 'relação fraca negativa' : 'relação fraca positiva') : Math.abs(r) < 0.5 ? (r < 0 ? 'relação moderada negativa' : 'relação moderada positiva') : (r < 0 ? 'relação forte negativa' : 'relação forte positiva');
   const card = (lbl, val, sub, cor) => `<div class="card" style="background:var(--surface2)"><div class="kpi-label">${lbl}</div><div class="kpi-val" style="font-size:1.25rem;color:${cor || 'var(--text)'}">${val}</div><div class="kpi-delta">${sub}</div></div>`;
   document.getElementById('clima-insights').innerHTML =
-    card('Voos em dia de chuva forte', ffF == null ? '—' : pctTxt((ffF / base.ff - 1) * 100), ffF == null ? 'sem dias de chuva forte' : `${dec1(ffF)} ${pax ? 'PAX' : 'voos'}/dia vs ${dec1(base.ff)} em dia seco`, ffF != null && ffF < base.ff ? 'var(--red)' : 'var(--green)') +
-    card('Bookings em dia de chuva forte', bkF == null ? '—' : pctTxt((bkF / base.bk - 1) * 100), bkF == null ? 'sem dias de chuva forte' : `${dec1(bkF)}/dia vs ${dec1(base.bk)} em dia seco`, bkF != null && bkF < base.bk ? 'var(--red)' : 'var(--green)') +
+    card(`${pax ? 'PAX voados' : 'Voos'} em dia de chuva`, ffChuva == null ? '—' : pctTxt((ffChuva / base.ff - 1) * 100), ffChuva == null ? 'sem dias de chuva' : `${dec1(ffChuva)}/dia vs ${dec1(base.ff)} em dia sem chuva`, ffChuva != null && ffChuva < base.ff ? 'var(--red)' : 'var(--green)') +
+    card(`${pax ? 'PAX reservados' : 'Bookings'} em dia de chuva`, bkChuva == null ? '—' : pctTxt((bkChuva / base.bk - 1) * 100), bkChuva == null ? 'sem dias de chuva' : `${dec1(bkChuva)}/dia vs ${dec1(base.bk)} em dia sem chuva`, bkChuva != null && bkChuva < base.bk ? 'var(--red)' : 'var(--green)') +
     card('Correlação chuva × voos', rTxt(rFf), `${rLeit(rFf)} · bookings: ${rTxt(rBk)} (${rLeit(rBk)})`, 'var(--cyan)') +
-    card(`${pax ? 'PAX' : 'Voos'} a menos com chuva`, perdaVoos == null ? '—' : fN(Math.max(0, perdaVoos)), `em ${chuva.length} dias de chuva moderada/forte (vs média de dia seco)`, 'var(--amber)');
+    card(`${pax ? 'PAX' : 'Voos'} a menos com chuva`, perdaVoos == null ? '—' : fN(Math.max(0, perdaVoos)), `em ${chuva.length} dias de chuva (vs média de dia sem chuva)`, 'var(--amber)');
 
   const fmtD = d => d.slice(8,10) + '/' + d.slice(5,7) + '/' + d.slice(2,4);
-  setText('clima-status', `Base: ${dias.length} dias (${fmtD(ini)} a ${fmtD(fim)}; hoje fica de fora por estar incompleto). "Dia seco" = Seco + Traço: ${dec1(base.bk)} ${pax ? 'PAX reservados' : 'bookings'} e ${dec1(base.ff)} ${pax ? 'PAX voados' : 'voos'} por dia. "vs mesmo dia da semana" compara cada dia com a média do mesmo dia da semana na base, para tirar o efeito de fim de semana. Correlação não prova causa: temporada, feriados e campanhas também mexem nos números.`);
+  setText('clima-status', `Base: ${dias.length} dias (${fmtD(ini)} a ${fmtD(fim)}; hoje fica de fora por estar incompleto). "Sem chuva" = Seco + Traço; "Chuva" = Fraca + Moderada + Forte. Dia sem chuva: ${dec1(base.bk)} ${pax ? 'PAX reservados' : 'bookings'} e ${dec1(base.ff)} ${pax ? 'PAX voados' : 'voos'} por dia. "vs mesmo dia da semana" compara cada dia com a média do mesmo dia da semana na base, para tirar o efeito de fim de semana. Correlação não prova causa: temporada, feriados e campanhas também mexem nos números.`);
 }
 
 function toggleVendPerf(forcar) {
