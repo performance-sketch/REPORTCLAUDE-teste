@@ -416,6 +416,45 @@
     <div class="card"><div class="kpi-label">Projeção Mensal</div><div class="kpi-val" id="rk-proj" style="color:var(--amber);font-size:1.2rem">—</div><div class="kpi-delta" id="rk-proj-sub">confirmações estimadas</div></div>
   </div>
 
+  <!-- Bookings & Fulfilments × Meteorologia (Open-Meteo, Lagoa) -->
+  <div class="card mb-5" id="clima-card">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <div>
+        <div style="font-weight:600;font-size:.9rem">🌧️ Bookings &amp; Fulfilments × Chuva</div>
+        <div id="clima-sub" style="font-size:.75rem;color:var(--sub);margin-top:2px">Chuva diária na Lagoa (Open-Meteo) · status pelo pico de chuva por hora</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;gap:4px">
+          <button onclick="setClimaMetrica('bk')"  id="clima-btn-bk"  class="tab-btn active" style="padding:3px 10px;font-size:.72rem">Bookings</button>
+          <button onclick="setClimaMetrica('pax')" id="clima-btn-pax" class="tab-btn"        style="padding:3px 10px;font-size:.72rem">PAX</button>
+        </div>
+        <button id="clima-toggle" onclick="toggleCard('clima-body','clima-toggle')" style="background:var(--surface2);border:1px solid var(--border);color:var(--sub);border-radius:6px;padding:4px 12px;font-size:.75rem;cursor:pointer">▲ Minimizar</button>
+      </div>
+    </div>
+    <div id="clima-body">
+      <div id="clima-legenda" style="display:flex;gap:12px;flex-wrap:wrap;font-size:.72rem;color:#94a3b8;margin-bottom:10px"></div>
+      <div style="position:relative"><canvas id="chartClima" height="110"></canvas></div>
+      <div id="clima-status" style="font-size:.75rem;color:var(--sub);margin-top:8px"></div>
+      <div style="font-weight:600;font-size:.85rem;margin:18px 0 8px">Operação por status de chuva <span style="font-weight:400;color:var(--sub);font-size:.72rem">— dias até hoje; previsão fica fora da média</span></div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>Status</th>
+            <th style="text-align:right">Dias</th>
+            <th style="text-align:right">Chuva média</th>
+            <th style="text-align:right">Nuvens média</th>
+            <th style="text-align:right" id="clima-th-bk">Bookings / dia</th>
+            <th style="text-align:right" id="clima-th-ff">Fulfilments / dia</th>
+            <th style="text-align:right">vs dia seco</th>
+            <th style="text-align:right">Dias sem voo</th>
+          </tr></thead>
+          <tbody id="clima-tbody"></tbody>
+        </table>
+      </div>
+      <div style="font-size:.7rem;color:var(--sub);margin-top:10px">Status do dia pelo maior volume de chuva em 1 hora: Seco = 0 mm · Traço &lt; 0,5 mm/h · Fraca &lt; 1 mm/h · Moderada &lt; 2 mm/h · Forte ≥ 2 mm/h. Bookings pela data da reserva; fulfilments pela data do voo (reservas confirmadas). Clima: Open-Meteo, Lagoa (−22,97, −43,21).</div>
+    </div>
+  </div>
+
   <!-- Carrinhos Abandonados / On Hold / Outros status por dia -->
   <div class="card mb-5">
     <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -1493,6 +1532,7 @@ function applyDateRange(from, to, prev, fulfilTo) {
   renderPaises(from, to);
   renderVendedores(from, to);
   renderVendPerf(from, to);
+  renderClima(from, to);
   renderHeatmap(from, to);
   renderCupons(from, to);
 
@@ -2237,6 +2277,148 @@ function populateVendedorFilter() {
   const vendedores = [...new Set(BOOKINGS.concat(BOOKINGS_VEND_EXTRA).filter(b => b.vend).map(b => b.vend))].sort();
   sel.innerHTML = '<option value="">Todos vendedores</option>' +
     vendedores.map(v => `<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+}
+
+// ─── Bookings & Fulfilments × Chuva (Open-Meteo) ─────────────────────────────
+const CLIMA_STATUS = [
+  {k:'Seco',     cor:'rgba(148,163,184,.25)'},
+  {k:'Traço',    cor:'rgba(148,163,184,.55)'},
+  {k:'Fraca',    cor:'rgba(125,211,252,.75)'},
+  {k:'Moderada', cor:'rgba(59,130,246,.85)'},
+  {k:'Forte',    cor:'rgba(30,64,175,.95)'},
+];
+const _climaCache = {};
+let _climaMetrica = 'bk', _climaFrom = '', _climaTo = '';
+function climaStatus(mm, maxH) {
+  if (!mm) return 'Seco';
+  if (maxH < 0.5) return 'Traço';
+  if (maxH < 1) return 'Fraca';
+  if (maxH < 2) return 'Moderada';
+  return 'Forte';
+}
+function setClimaMetrica(m) {
+  _climaMetrica = m;
+  ['bk','pax'].forEach(v => { const b = document.getElementById('clima-btn-' + v); if (b) b.classList.toggle('active', v === m); });
+  renderClima(_climaFrom, _climaTo);
+}
+async function buscarClima(from, to) {
+  const addD = (d, n) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n); return x.toISOString().slice(0,10); };
+  const lim = addD(HOJE, 15);
+  const fim = to > lim ? lim : to;
+  const chave = from + '|' + fim;
+  if (_climaCache[chave]) return _climaCache[chave];
+  const base = 'latitude=-22.97&longitude=-43.21&daily=precipitation_sum,cloud_cover_mean&hourly=precipitation&timezone=America%2FSao_Paulo';
+  const partes = [];
+  if (from <= HOJE) partes.push(`https://historical-forecast-api.open-meteo.com/v1/forecast?${base}&start_date=${from}&end_date=${fim < HOJE ? fim : HOJE}`);
+  if (fim > HOJE) partes.push(`https://api.open-meteo.com/v1/forecast?${base}&start_date=${from > HOJE ? from : addD(HOJE, 1)}&end_date=${fim}`);
+  const dias = {};
+  for (const url of partes) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('Open-Meteo ' + r.status);
+    const j = await r.json();
+    const maxH = {};
+    (j.hourly?.time || []).forEach((t, i) => { const d = t.slice(0,10), v = j.hourly.precipitation[i] || 0; if (v > (maxH[d] || 0)) maxH[d] = v; });
+    (j.daily?.time || []).forEach((d, i) => {
+      const mm = j.daily.precipitation_sum[i];
+      if (mm == null) return;
+      dias[d] = {mm, nuv: j.daily.cloud_cover_mean[i], maxH: maxH[d] || 0, st: climaStatus(mm, maxH[d] || 0), prev: d > HOJE};
+    });
+  }
+  return (_climaCache[chave] = dias);
+}
+async function renderClima(from, to) {
+  if (!document.getElementById('chartClima')) return;
+  _climaFrom = from; _climaTo = to;
+  const sub = document.getElementById('clima-sub');
+  let clima;
+  try { clima = await buscarClima(from, to); }
+  catch (e) {
+    if (sub) sub.textContent = 'Não foi possível carregar a chuva (Open-Meteo) agora — tente recarregar a página.';
+    return;
+  }
+  if (from !== _climaFrom || to !== _climaTo) return;  // período mudou enquanto carregava
+  const pax = _climaMetrica === 'pax';
+  const n = b => pax ? (b.px || 1) : 1;
+  const bookMap = {}, fulfMap = {};
+  for (const b of BOOKINGS) {
+    if (b.s !== 'CONFIRMED') continue;
+    if (b.d >= from && b.d <= to) bookMap[b.d] = (bookMap[b.d] || 0) + n(b);
+    if (b.t && b.t >= from && b.t <= to) fulfMap[b.t] = (fulfMap[b.t] || 0) + n(b);
+  }
+  const dias = [];
+  for (let d = new Date(from + 'T12:00:00'); d.toISOString().slice(0,10) <= to; d.setDate(d.getDate() + 1)) dias.push(d.toISOString().slice(0,10));
+  const cor = st => (CLIMA_STATUS.find(x => x.k === st) || CLIMA_STATUS[0]).cor;
+  const lblBk = pax ? 'Reservas feitas (PAX)' : 'Reservas feitas';
+  const lblFf = pax ? 'PAX Fulfilments' : 'Fulfilments (voos)';
+  document.getElementById('clima-legenda').innerHTML =
+    `<span><i style="display:inline-block;width:10px;height:10px;background:rgba(99,102,241,.65);border-radius:2px;margin-right:4px"></i>${lblBk}</span>` +
+    `<span><i style="display:inline-block;width:18px;height:2px;background:#06b6d4;vertical-align:middle;margin-right:4px"></i>${lblFf}</span>` +
+    CLIMA_STATUS.map(x => `<span><i style="display:inline-block;width:10px;height:10px;background:${x.cor};border-radius:2px;margin-right:4px"></i>Chuva · ${x.k}</span>`).join('');
+  setText('clima-th-bk', (pax ? 'PAX reservados' : 'Bookings') + ' / dia');
+  setText('clima-th-ff', (pax ? 'PAX voados' : 'Fulfilments') + ' / dia');
+  makeChart('chartClima', {
+    type: 'bar',
+    data: {
+      labels: dias.map(d => fAxis(d)),
+      datasets: [
+        { label:lblBk, data:dias.map(d => bookMap[d] || 0), backgroundColor:'rgba(99,102,241,.65)', borderRadius:3, yAxisID:'y', order:2 },
+        { label:lblFf, data:dias.map(d => fulfMap[d] || 0), type:'line', borderColor:'#06b6d4', backgroundColor:'#06b6d4',
+           tension:0.35, pointRadius:2, borderWidth:2, yAxisID:'y', order:1 },
+        { label:'Chuva (mm)', data:dias.map(d => clima[d] ? clima[d].mm : null), yAxisID:'y1', order:3, borderRadius:2,
+           backgroundColor:dias.map(d => clima[d] ? cor(clima[d].st) : 'transparent'),
+           borderColor:dias.map(d => clima[d] && clima[d].prev ? '#f59e0b' : 'transparent'), borderWidth:dias.map(d => clima[d] && clima[d].prev ? 1 : 0) },
+      ]
+    },
+    options: {
+      responsive:true, interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{
+          title: it => { const d = dias[it[0].dataIndex]; return d.slice(8,10) + '/' + d.slice(5,7) + '/' + d.slice(0,4); },
+          label: c => c.dataset.yAxisID === 'y1' ? ` Chuva: ${(c.raw ?? 0).toLocaleString('pt-BR')} mm` : ` ${c.dataset.label}: ${c.raw}`,
+          footer: it => { const c = clima[dias[it[0].dataIndex]]; return c ? `${c.st} · pico ${c.maxH.toLocaleString('pt-BR')} mm/h · nuvens ${c.nuv}%${c.prev ? ' · PREVISÃO' : ''}` : 'sem dado de clima'; },
+        }}
+      },
+      scales:{
+        x:{grid:{display:false}, ticks:{maxTicksLimit:18}},
+        y:{grid:{color:'rgba(51,65,85,.4)'}, beginAtZero:true, title:{display:true, text: pax ? 'PAX' : 'Reservas / voos'}},
+        y1:{position:'right', beginAtZero:true, grid:{display:false}, title:{display:true, text:'Chuva (mm)'}}
+      }
+    }
+  });
+
+  // Resumo por status (só dias até hoje)
+  const passados = dias.filter(d => d <= HOJE && clima[d]);
+  const prev = dias.filter(d => clima[d] && clima[d].prev).length;
+  const mmTot = passados.reduce((t, d) => t + clima[d].mm, 0);
+  const chuvosos = passados.filter(d => ['Moderada','Forte'].includes(clima[d].st)).length;
+  setText('clima-sub', `Chuva na Lagoa (Open-Meteo): ${mmTot.toLocaleString('pt-BR', {maximumFractionDigits:1})} mm em ${passados.length} dias · ${chuvosos} dias de chuva moderada/forte` + (prev ? ` · ${prev} dias de previsão (borda laranja)` : ''));
+  const g = {};
+  for (const d of passados) {
+    const c = clima[d], a = g[c.st] || (g[c.st] = {dias:0, mm:0, nuv:0, bk:0, ff:0, zero:0});
+    a.dias++; a.mm += c.mm; a.nuv += c.nuv || 0; a.bk += bookMap[d] || 0; a.ff += fulfMap[d] || 0;
+    if (!fulfMap[d]) a.zero++;
+  }
+  const seco = ['Seco','Traço'].reduce((a, k) => { const x = g[k]; if (x) { a.dias += x.dias; a.ff += x.ff; } return a; }, {dias:0, ff:0});
+  const ffSeco = seco.dias ? seco.ff / seco.dias : 0;
+  const dec1 = v => v.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1});
+  const linhas = CLIMA_STATUS.filter(x => g[x.k]).map(x => {
+    const a = g[x.k], ffd = a.ff / a.dias;
+    const vs = ffSeco && !['Seco','Traço'].includes(x.k) ? (ffd / ffSeco - 1) * 100 : null;
+    return `<tr>
+      <td><span style="display:inline-block;width:10px;height:10px;background:${x.cor};border-radius:2px;margin-right:6px"></span>${x.k}</td>
+      <td style="text-align:right">${a.dias}</td>
+      <td style="text-align:right">${dec1(a.mm / a.dias)} mm</td>
+      <td style="text-align:right;color:#94a3b8">${Math.round(a.nuv / a.dias)}%</td>
+      <td style="text-align:right">${dec1(a.bk / a.dias)}</td>
+      <td style="text-align:right;font-weight:600;color:var(--cyan)">${dec1(ffd)}</td>
+      <td style="text-align:right;color:${vs == null ? '#94a3b8' : vs < 0 ? 'var(--red)' : 'var(--green)'}">${vs == null ? 'base' : (vs > 0 ? '+' : '') + Math.round(vs) + '%'}</td>
+      <td style="text-align:right;color:${a.zero ? 'var(--amber)' : '#94a3b8'}">${a.zero}</td>
+    </tr>`;
+  });
+  document.getElementById('clima-tbody').innerHTML = linhas.join('') ||
+    `<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:12px">Sem dias passados no período</td></tr>`;
+  setText('clima-status', ffSeco ? `Base "dia seco" = Seco + Traço: ${dec1(ffSeco)} ${pax ? 'PAX voados' : 'fulfilments'} por dia.` : '');
 }
 
 function toggleVendPerf(forcar) {
