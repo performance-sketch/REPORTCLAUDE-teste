@@ -432,8 +432,17 @@
       </div>
     </div>
     <div id="clima-body">
-      <div id="clima-legenda" style="display:flex;gap:12px;flex-wrap:wrap;font-size:.72rem;color:#94a3b8;margin-bottom:10px"></div>
-      <div style="position:relative"><canvas id="chartClima" height="110"></canvas></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:.72rem;color:#94a3b8">
+        <span>Filtrar dias:</span>
+        <button onclick="climaFiltroRapido('todos')"  class="tab-btn" style="padding:2px 9px;font-size:.7rem">Todos</button>
+        <button onclick="climaFiltroRapido('chuva')"  class="tab-btn" style="padding:2px 9px;font-size:.7rem">Só dias com chuva</button>
+        <button onclick="climaFiltroRapido('forte')"  class="tab-btn" style="padding:2px 9px;font-size:.7rem">Só chuva forte</button>
+        <button onclick="climaFiltroRapido('seco')"   class="tab-btn" style="padding:2px 9px;font-size:.7rem">Só dias secos</button>
+        <span style="margin-left:6px">· clique na legenda para ligar/desligar · clique num dia para ver o detalhe</span>
+      </div>
+      <div id="clima-legenda" style="display:flex;gap:8px;flex-wrap:wrap;font-size:.72rem;color:#94a3b8;margin-bottom:10px"></div>
+      <div style="position:relative"><canvas id="chartClima" height="110" style="cursor:pointer"></canvas></div>
+      <div id="clima-dia" style="display:none;margin-top:10px"></div>
       <div class="flex items-center justify-between flex-wrap gap-2" style="margin:22px 0 10px">
         <div style="font-weight:600;font-size:.9rem">📉 Impacto da chuva em bookings e voos</div>
         <div style="display:flex;gap:4px">
@@ -2299,6 +2308,19 @@ const CLIMA_STATUS = [
 ];
 const _climaCache = {};
 let _climaMetrica = 'bk', _climaFrom = '', _climaTo = '', _climaBase = 'periodo';
+const _climaSeries = {bk:true, ff:true, chuva:true};
+const _climaSt = new Set(['Seco','Traço','Fraca','Moderada','Forte']);
+let _climaDraw = null;
+function climaToggleSerie(k) { _climaSeries[k] = !_climaSeries[k]; drawClimaChart(); }
+function climaToggleStatus(k) {
+  if (_climaSt.has(k)) _climaSt.delete(k); else _climaSt.add(k);
+  drawClimaChart();
+}
+function climaFiltroRapido(tipo) {
+  const grupos = {todos:['Seco','Traço','Fraca','Moderada','Forte'], chuva:['Fraca','Moderada','Forte'], forte:['Forte'], seco:['Seco','Traço']};
+  _climaSt.clear(); (grupos[tipo] || grupos.todos).forEach(k => _climaSt.add(k));
+  drawClimaChart();
+}
 function setClimaBase(b) {
   _climaBase = b;
   ['periodo','historico'].forEach(v => { const e = document.getElementById('clima-base-' + v); if (e) e.classList.toggle('active', v === b); });
@@ -2324,8 +2346,11 @@ async function buscarClima(from, to) {
   if (_climaCache[chave]) return _climaCache[chave];
   const base = 'latitude=-22.97&longitude=-43.21&daily=precipitation_sum,cloud_cover_mean&hourly=precipitation&timezone=America%2FSao_Paulo';
   const partes = [];
-  if (from <= HOJE) partes.push(`https://historical-forecast-api.open-meteo.com/v1/forecast?${base}&start_date=${from}&end_date=${fim < HOJE ? fim : HOJE}`);
-  if (fim > HOJE) partes.push(`https://api.open-meteo.com/v1/forecast?${base}&start_date=${from > HOJE ? from : addD(HOJE, 1)}&end_date=${fim}`);
+  // últimos ~3 meses: API de previsão (mesma fonte do card de chuva); antes disso: histórico
+  const corte = addD(HOJE, -90);
+  if (from >= corte) partes.push(`https://api.open-meteo.com/v1/forecast?${base}&start_date=${from}&end_date=${fim}`);
+  else if (from <= HOJE) partes.push(`https://historical-forecast-api.open-meteo.com/v1/forecast?${base}&start_date=${from}&end_date=${fim < HOJE ? fim : HOJE}`);
+  if (from < corte && fim > HOJE) partes.push(`https://api.open-meteo.com/v1/forecast?${base}&start_date=${from > HOJE ? from : addD(HOJE, 1)}&end_date=${fim}`);
   const dias = {};
   for (const url of partes) {
     const r = await fetch(url);
@@ -2362,36 +2387,64 @@ async function renderClima(from, to) {
   }
   const dias = [];
   for (let d = new Date(from + 'T12:00:00'); d.toISOString().slice(0,10) <= to; d.setDate(d.getDate() + 1)) dias.push(d.toISOString().slice(0,10));
+  setText('clima-th-bk', (pax ? 'PAX reservados' : 'Bookings') + ' / dia');
+  setText('clima-th-ff', (pax ? 'PAX voados' : 'Fulfilments') + ' / dia');
+  _climaDraw = {dias, clima, bookMap, fulfMap, pax};
+  const det = document.getElementById('clima-dia'); if (det) det.style.display = 'none';
+  drawClimaChart();
+
+  const passados = dias.filter(d => d <= HOJE && clima[d]);
+  const prev = dias.filter(d => clima[d] && clima[d].prev).length;
+  const mmTot = passados.reduce((t, d) => t + clima[d].mm, 0);
+  const chuvosos = passados.filter(d => ['Moderada','Forte'].includes(clima[d].st)).length;
+  setText('clima-sub', `Chuva na Lagoa (Open-Meteo): ${mmTot.toLocaleString('pt-BR', {maximumFractionDigits:1})} mm em ${passados.length} dias · ${chuvosos} dias de chuva moderada/forte` + (prev ? ` · ${prev} dias de previsão (borda laranja)` : ''));
+  await renderClimaImpacto(pax, n);
+}
+
+function drawClimaChart() {
+  if (!_climaDraw) return;
+  const {dias, clima, bookMap, fulfMap, pax} = _climaDraw;
   const cor = st => (CLIMA_STATUS.find(x => x.k === st) || CLIMA_STATUS[0]).cor;
   const lblBk = pax ? 'Reservas feitas (PAX)' : 'Reservas feitas';
   const lblFf = pax ? 'PAX Fulfilments' : 'Fulfilments (voos)';
+  // dia visível = status ativo (dias sem dado de clima ficam visíveis só com "Todos")
+  const vis = d => clima[d] ? _climaSt.has(clima[d].st) : _climaSt.size === 5;
+  const nVis = dias.filter(vis).length;
+  const chip = (ativo, onclick, amostra, texto) =>
+    `<button onclick="${onclick}" title="Clique para ${ativo ? 'esconder' : 'mostrar'}" style="display:inline-flex;align-items:center;gap:5px;background:${ativo ? 'var(--surface2)' : 'transparent'};border:1px solid ${ativo ? 'var(--border)' : 'rgba(51,65,85,.5)'};border-radius:999px;padding:2px 9px;color:${ativo ? '#cbd5e1' : '#64748b'};font-size:.72rem;cursor:pointer;${ativo ? '' : 'text-decoration:line-through;'}">${amostra}${texto}</button>`;
+  const qtd = k => dias.filter(d => clima[d] && clima[d].st === k).length;
   document.getElementById('clima-legenda').innerHTML =
-    `<span><i style="display:inline-block;width:10px;height:10px;background:rgba(99,102,241,.65);border-radius:2px;margin-right:4px"></i>${lblBk}</span>` +
-    `<span><i style="display:inline-block;width:18px;height:2px;background:#06b6d4;vertical-align:middle;margin-right:4px"></i>${lblFf}</span>` +
-    CLIMA_STATUS.map(x => `<span><i style="display:inline-block;width:10px;height:10px;background:${x.cor};border-radius:2px;margin-right:4px"></i>Chuva · ${x.k}</span>`).join('');
-  setText('clima-th-bk', (pax ? 'PAX reservados' : 'Bookings') + ' / dia');
-  setText('clima-th-ff', (pax ? 'PAX voados' : 'Fulfilments') + ' / dia');
+    chip(_climaSeries.bk, "climaToggleSerie('bk')", '<i style="display:inline-block;width:10px;height:10px;background:rgba(99,102,241,.65);border-radius:2px"></i>', lblBk) +
+    chip(_climaSeries.ff, "climaToggleSerie('ff')", '<i style="display:inline-block;width:16px;height:2px;background:#06b6d4"></i>', lblFf) +
+    chip(_climaSeries.chuva, "climaToggleSerie('chuva')", '<i style="display:inline-block;width:10px;height:10px;background:linear-gradient(90deg,rgba(125,211,252,.8),rgba(30,64,175,.95));border-radius:2px"></i>', 'Chuva (mm)') +
+    '<span style="width:1px;background:var(--border);margin:0 2px"></span>' +
+    CLIMA_STATUS.map(x => chip(_climaSt.has(x.k), `climaToggleStatus('${x.k}')`, `<i style="display:inline-block;width:10px;height:10px;background:${x.cor};border-radius:2px"></i>`, `${x.k} (${qtd(x.k)})`)).join('') +
+    `<span style="align-self:center;margin-left:4px">${nVis} de ${dias.length} dias</span>`;
   makeChart('chartClima', {
     type: 'bar',
     data: {
       labels: dias.map(d => fAxis(d)),
       datasets: [
-        { label:lblBk, data:dias.map(d => bookMap[d] || 0), backgroundColor:'rgba(99,102,241,.65)', borderRadius:3, yAxisID:'y', order:2 },
-        { label:lblFf, data:dias.map(d => fulfMap[d] || 0), type:'line', borderColor:'#06b6d4', backgroundColor:'#06b6d4',
-           tension:0.35, pointRadius:2, borderWidth:2, yAxisID:'y', order:1 },
-        { label:'Chuva (mm)', data:dias.map(d => clima[d] ? clima[d].mm : null), yAxisID:'y1', order:3, borderRadius:2,
+        { label:lblBk, hidden:!_climaSeries.bk, data:dias.map(d => vis(d) ? (bookMap[d] || 0) : null), backgroundColor:'rgba(99,102,241,.65)', borderRadius:3, yAxisID:'y', order:2 },
+        { label:lblFf, hidden:!_climaSeries.ff, data:dias.map(d => vis(d) ? (fulfMap[d] || 0) : null), type:'line', borderColor:'#06b6d4', backgroundColor:'#06b6d4',
+           tension:0.35, pointRadius:3, pointHoverRadius:6, borderWidth:2, spanGaps:false, yAxisID:'y', order:1 },
+        { label:'Chuva (mm)', hidden:!_climaSeries.chuva, data:dias.map(d => clima[d] && vis(d) ? clima[d].mm : null), yAxisID:'y1', order:3, borderRadius:2,
            backgroundColor:dias.map(d => clima[d] ? cor(clima[d].st) : 'transparent'),
            borderColor:dias.map(d => clima[d] && clima[d].prev ? '#f59e0b' : 'transparent'), borderWidth:dias.map(d => clima[d] && clima[d].prev ? 1 : 0) },
       ]
     },
     options: {
       responsive:true, interaction:{mode:'index', intersect:false},
+      onClick: (ev, els, chart) => {
+        const pts = chart.getElementsAtEventForMode(ev, 'index', {intersect:false}, true);
+        if (pts.length) climaDetalheDia(dias[pts[0].index]);
+      },
       plugins:{
         legend:{display:false},
         tooltip:{callbacks:{
           title: it => { const d = dias[it[0].dataIndex]; return d.slice(8,10) + '/' + d.slice(5,7) + '/' + d.slice(0,4); },
           label: c => c.dataset.yAxisID === 'y1' ? ` Chuva: ${(c.raw ?? 0).toLocaleString('pt-BR')} mm` : ` ${c.dataset.label}: ${c.raw}`,
-          footer: it => { const c = clima[dias[it[0].dataIndex]]; return c ? `${c.st} · pico ${c.maxH.toLocaleString('pt-BR')} mm/h · nuvens ${c.nuv}%${c.prev ? ' · PREVISÃO' : ''}` : 'sem dado de clima'; },
+          footer: it => { const c = clima[dias[it[0].dataIndex]]; return [c ? `${c.st} · pico ${c.maxH.toLocaleString('pt-BR')} mm/h · nuvens ${c.nuv}%${c.prev ? ' · PREVISÃO' : ''}` : 'sem dado de clima', 'Clique para ver o detalhe do dia']; },
         }}
       },
       scales:{
@@ -2401,13 +2454,35 @@ async function renderClima(from, to) {
       }
     }
   });
+}
 
-  const passados = dias.filter(d => d <= HOJE && clima[d]);
-  const prev = dias.filter(d => clima[d] && clima[d].prev).length;
-  const mmTot = passados.reduce((t, d) => t + clima[d].mm, 0);
-  const chuvosos = passados.filter(d => ['Moderada','Forte'].includes(clima[d].st)).length;
-  setText('clima-sub', `Chuva na Lagoa (Open-Meteo): ${mmTot.toLocaleString('pt-BR', {maximumFractionDigits:1})} mm em ${passados.length} dias · ${chuvosos} dias de chuva moderada/forte` + (prev ? ` · ${prev} dias de previsão (borda laranja)` : ''));
-  await renderClimaImpacto(pax, n);
+function climaDetalheDia(d) {
+  const box = document.getElementById('clima-dia');
+  if (!box || !_climaDraw) return;
+  const c = _climaDraw.clima[d];
+  const feitas = BOOKINGS.filter(b => b.s === 'CONFIRMED' && b.d === d);
+  const voadas = BOOKINGS.filter(b => b.s === 'CONFIRMED' && b.t === d);
+  const soma = (a, k) => a.reduce((t, b) => t + (b[k] || 0), 0);
+  const prods = {};
+  for (const b of voadas) prods[b.p] = (prods[b.p] || 0) + 1;
+  const sem = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'][new Date(d + 'T12:00:00').getDay()];
+  const item = (lbl, val) => `<div><div class="kpi-label">${lbl}</div><div style="font-weight:600;font-size:.95rem">${val}</div></div>`;
+  box.style.display = '';
+  box.innerHTML = `<div class="card" style="background:var(--surface2)">
+    <div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:10px">
+      <div style="font-weight:600;font-size:.85rem">📅 ${d.slice(8,10)}/${d.slice(5,7)}/${d.slice(0,4)} · ${sem}${c && c.prev ? ' · <span style="color:var(--amber)">previsão</span>' : ''}</div>
+      <button onclick="document.getElementById('clima-dia').style.display='none'" style="background:transparent;border:1px solid var(--border);color:var(--sub);border-radius:6px;padding:2px 10px;font-size:.72rem;cursor:pointer">✕ Fechar</button>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+      ${item('Status', c ? c.st : '—')}
+      ${item('Chuva', c ? c.mm.toLocaleString('pt-BR') + ' mm' : '—')}
+      ${item('Pico por hora', c ? c.maxH.toLocaleString('pt-BR') + ' mm/h' : '—')}
+      ${item('Nuvens', c ? c.nuv + '%' : '—')}
+      ${item('Reservas feitas', `${feitas.length} · ${soma(feitas, 'px')} pax · ${fBRL(soma(feitas, 'v'))}`)}
+      ${item('Voos (fulfilments)', `${voadas.length} · ${soma(voadas, 'px')} pax`)}
+    </div>
+    <div style="font-size:.72rem;color:#94a3b8;margin-top:10px">${Object.keys(prods).length ? 'Voados no dia: ' + Object.entries(prods).sort((a, b) => b[1] - a[1]).map(([p, q]) => `${escHtml(p)} (${q})`).join(' · ') : 'Nenhum voo confirmado nesta data.'}</div>
+  </div>`;
 }
 
 async function renderClimaImpacto(pax, n) {
