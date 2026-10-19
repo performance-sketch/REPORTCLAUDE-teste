@@ -2526,12 +2526,12 @@ async function renderClimaImpacto(pax, n) {
     data: { datasets: [
       { label:'Dias', data: dias.map(r => ({x:r.c.mm, y:r.ff, d:r.d, st:r.c.st, bk:r.bk})), pointRadius:3.5,
          backgroundColor: dias.map(r => r.c.st === 'Seco' ? 'rgba(148,163,184,.6)' : corSt(r.c.st)) },
-      { label:'Tendência', type:'line', data:[{x:0, y:icpt}, {x:xMax, y:icpt + slope * xMax}], borderColor:'#f59e0b', borderWidth:2, borderDash:[6,4], pointRadius:0 },
+      { label:'Tendência', type:'line', data:[{x:0, y:Math.max(0, icpt)}, {x:(slope < 0 && icpt + slope * xMax < 0) ? -icpt / slope : xMax, y:Math.max(0, icpt + slope * xMax)}], borderColor:'#f59e0b', borderWidth:2, borderDash:[6,4], pointRadius:0 },
     ]},
     options: { responsive:true, plugins:{legend:{display:false},
       tooltip:{callbacks:{label: c => c.raw.d ? ` ${c.raw.d.slice(8,10)}/${c.raw.d.slice(5,7)}/${c.raw.d.slice(2,4)} · ${c.raw.st} · ${c.raw.x.toLocaleString('pt-BR')} mm · ${c.raw.y} ${pax ? 'PAX voados' : 'voos'} · ${c.raw.bk} ${pax ? 'PAX reservados' : 'bookings'}` : ' Tendência'}}},
       scales:{ x:{title:{display:true, text:'Chuva no dia (mm)'}, beginAtZero:true, grid:{color:'rgba(51,65,85,.3)'}},
-               y:{title:{display:true, text: pax ? 'PAX voados' : 'Voos (fulfilments)'}, beginAtZero:true, grid:{color:'rgba(51,65,85,.3)'}} } }
+               y:{title:{display:true, text: pax ? 'PAX voados' : 'Voos (fulfilments)'}, min:0, beginAtZero:true, grid:{color:'rgba(51,65,85,.3)'}} } }
   });
   const fmtD = d => d.slice(8,10) + '/' + d.slice(5,7) + '/' + d.slice(2,4);
   setText('clima-status', `Base: ${dias.length} dias (${fmtD(ini)} a ${fmtD(fim)}; hoje fica de fora por estar incompleto). "Dia seco" = Seco + Traço: ${dec1(base.bk)} ${pax ? 'PAX reservados' : 'bookings'} e ${dec1(base.ff)} ${pax ? 'PAX voados' : 'voos'} por dia. "vs mesmo dia da semana" compara cada dia com a média do mesmo dia da semana na base, para tirar o efeito de fim de semana. Correlação não prova causa: temporada, feriados e campanhas também mexem nos números.`);
