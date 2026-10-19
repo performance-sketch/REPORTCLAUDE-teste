@@ -1583,12 +1583,6 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
         <table>
           <thead><tr>
             <th>Extra</th>
-            <th style="text-align:right">Unidades</th>
-            <th style="text-align:right">Bookings</th>
-            <th style="text-align:right">PAX</th>
-            <th style="text-align:right">Pax/booking</th>
-            <th style="text-align:right">Vendas</th>
-            <th style="text-align:right">Ticket médio</th>
             <th style="text-align:right">Extras</th>
             <th style="text-align:right">Extras/pax</th>
             <th style="text-align:right">FOC (R$)</th>
@@ -1600,7 +1594,7 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
           <tbody id="vend-perf-extra-tbody"></tbody>
         </table>
       </div>
-      <div style="font-size:.7rem;color:var(--sub);margin-top:10px">FOC = pagamentos tipo FREE no Rezdy (cortesias de GoPro/360/SSP, "desconto pra fechar", collabs, upgrades). Vendas = valor bruto da reserva. Líquido = vendas − FOC − cupom. Em "Por Extra", Extras = valor só daquele extra e as demais colunas são das reservas inteiras que o incluíram (uma reserva com 2 extras aparece nas 2 linhas, por isso as linhas não somam o total).</div>
+      <div style="font-size:.7rem;color:var(--sub);margin-top:10px">FOC = pagamentos tipo FREE no Rezdy (cortesias de GoPro/360/SSP, "desconto pra fechar", collabs, upgrades). Vendas = valor bruto da reserva. Líquido = vendas − FOC − cupom. Em "Por Extra", Extras = valor só daquele extra; Extras/pax = esse valor ÷ pax das reservas que o incluíram; FOC, cupom e líquido são das reservas inteiras que incluíram o extra (uma reserva com 2 extras aparece nas 2 linhas, por isso as linhas não somam o total).</div>
     </div>
   </div>
 
@@ -3289,14 +3283,6 @@ function renderVendPerf(from, to) {{
     const tbE0 = document.getElementById('vend-perf-extra-tbody'); if (tbE0) tbE0.innerHTML = '';
     return;
   }}
-  const linhaExtras = a => {{
-    const itens = Object.entries(a.exd).sort((x, y) => y[1].v - x[1].v);
-    if (!itens.length) return '<span style="font-size:.72rem;color:#64748b">Sem extras vendidos</span>';
-    return '<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:.72rem">' + itens.map(([n, e]) =>
-      `<span style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;color:#cbd5e1">
-        ${{escHtml(n)}}: <b>${{e.q}}</b> un · <span style="color:var(--cyan)">${{fR(e.v)}}</span> · ${{dec(div(e.q, a.px) * 100, 0)}}% dos pax
-      </span>`).join('') + '</div>';
-  }};
   const linha = (nome, a, total) => {{
     const focPct = div(a.foc, a.v) * 100;
     const corFoc = focPct >= 20 ? 'var(--red)' : focPct >= 10 ? 'var(--amber)' : '#94a3b8';
@@ -3315,8 +3301,7 @@ function renderVendPerf(from, to) {{
       <td style="text-align:right;color:${{corFoc}}">${{dec(focPct, 1)}}%</td>
       <td style="text-align:right;color:#94a3b8">${{fR(a.cup)}}</td>
       <td style="text-align:right;font-weight:600">${{fR(a.v - a.foc - a.cup)}}</td>
-    </tr>
-    <tr><td colspan="13" style="padding:2px 12px 10px;border-top:none">${{linhaExtras(a)}}</td></tr>`;
+    </tr>`;
   }};
   tbody.innerHTML = linhas.map(([n, a]) => linha(n, a, false)).join('') + linha('', tot, true);
 
@@ -3349,13 +3334,7 @@ function renderVendPerf(from, to) {{
     const corFoc = focPct >= 20 ? 'var(--red)' : focPct >= 10 ? 'var(--amber)' : '#94a3b8';
     return `<tr style="${{estilo || ''}}">
       <td style="font-weight:600">${{nome}}</td>
-      <td style="text-align:right;font-weight:600;color:var(--cyan)">${{un}}</td>
-      <td style="text-align:right;font-weight:600">${{a.bk}}</td>
-      <td style="text-align:right;color:#94a3b8">${{a.px}}</td>
-      <td style="text-align:right">${{dec(div(a.px, a.bk), 2)}}</td>
-      <td style="text-align:right;font-weight:600;color:#22c55e">${{fR(a.v)}}</td>
-      <td style="text-align:right">${{fR(div(a.v, a.bk))}}</td>
-      <td style="text-align:right;color:#94a3b8">${{fR(a.ex)}}</td>
+      <td style="text-align:right;font-weight:600;color:var(--cyan)">${{fR(a.ex)}}</td>
       <td style="text-align:right;color:var(--cyan)">${{fR(div(a.ex, a.px))}}</td>
       <td style="text-align:right;color:${{a.foc ? 'var(--amber)' : '#94a3b8'}}">${{fR(a.foc)}}</td>
       <td style="text-align:right;color:#94a3b8">${{a.focBk}}</td>
@@ -3366,7 +3345,7 @@ function renderVendPerf(from, to) {{
   }};
   const exLinhas = Object.entries(porEx).sort((x, y) => y[1].ex - x[1].ex);
   if (!totE.bk) {{
-    tbE.innerHTML = `<tr><td colspan="14" style="text-align:center;color:#94a3b8;padding:12px">Nenhuma reserva interna no período</td></tr>`;
+    tbE.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:12px">Nenhuma reserva interna no período</td></tr>`;
     return;
   }}
   tbE.innerHTML = exLinhas.map(([n, a]) => linhaE(escHtml(n), a, a.un)).join('')
