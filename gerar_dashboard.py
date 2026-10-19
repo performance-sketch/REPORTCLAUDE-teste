@@ -779,6 +779,10 @@ def processar_rezdy(reservas, dias=None):
         ):
             if _val:
                 todos_bookings[-1][_k] = round(_val, 2)
+        _cpn = (b.get("coupon") or "").strip().upper() or next(
+            ((x.get("label") or "").strip().upper() for x in _pg if x.get("type") == "PROMO_CODE" and (x.get("label") or "").strip()), "")
+        if _cpn:
+            todos_bookings[-1]["cpn"] = _cpn
         _exd = defaultdict(lambda: [0, 0.0])
         for i in itens:
             for e in (i.get("extras") or []):
@@ -1568,6 +1572,7 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
             <th style="text-align:right">Bookings c/ FOC</th>
             <th style="text-align:right">FOC %</th>
             <th style="text-align:right">Cupom</th>
+            <th>Cupom utilizado</th>
             <th style="text-align:right">Líquido</th>
           </tr></thead>
           <tbody id="vend-perf-tbody"></tbody>
@@ -1589,6 +1594,7 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
             <th style="text-align:right">Bookings c/ FOC</th>
             <th style="text-align:right">FOC %</th>
             <th style="text-align:right">Cupom</th>
+            <th>Cupom utilizado</th>
             <th style="text-align:right">Líquido</th>
           </tr></thead>
           <tbody id="vend-perf-extra-tbody"></tbody>
@@ -3261,6 +3267,7 @@ function renderVendPerf(from, to) {{
       a.bk++; a.px += (b.px || 1); a.v += b.v;
       a.ex += (b.ex || 0); a.foc += (b.foc || 0); a.cup += (b.cup || 0);
       if (b.foc) a.focBk++;
+      if (b.cpn) {{ a.cpns = a.cpns || {{}}; a.cpns[b.cpn] = (a.cpns[b.cpn] || 0) + 1; }}
       for (const [n, q, val] of (b.exd || [])) {{
         const e = a.exd[n] || (a.exd[n] = {{q:0, v:0}});
         e.q += q; e.v += val;
@@ -3279,7 +3286,7 @@ function renderVendPerf(from, to) {{
   setText('vp-foc-sub', dec(div(tot.foc, tot.v) * 100, 1) + '% das vendas · ' + tot.focBk + ' bookings');
   const linhas = Object.entries(ag).sort((a, b) => b[1].v - a[1].v);
   if (!linhas.length) {{
-    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#94a3b8;padding:12px">Nenhuma reserva interna no período</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="14" style="text-align:center;color:#94a3b8;padding:12px">Nenhuma reserva interna no período</td></tr>`;
     const tbE0 = document.getElementById('vend-perf-extra-tbody'); if (tbE0) tbE0.innerHTML = '';
     return;
   }}
@@ -3300,6 +3307,9 @@ function renderVendPerf(from, to) {{
       <td style="text-align:right;color:#94a3b8">${{a.focBk}}</td>
       <td style="text-align:right;color:${{corFoc}}">${{dec(focPct, 1)}}%</td>
       <td style="text-align:right;color:#94a3b8">${{fR(a.cup)}}</td>
+      <td style="font-size:.72rem;color:#cbd5e1;white-space:normal;min-width:140px;font-weight:400">${{
+        Object.entries(a.cpns || {{}}).sort((x, y) => y[1] - x[1]).map(([c, n]) => `${{escHtml(c)}} (${{n}})`).join(' · ') || '<span style="color:#64748b">—</span>'
+      }}</td>
       <td style="text-align:right;font-weight:600">${{fR(a.v - a.foc - a.cup)}}</td>
     </tr>`;
   }};
@@ -3318,6 +3328,7 @@ function renderVendPerf(from, to) {{
     a.bk++; a.px += (b.px || 1); a.v += b.v; a.ex += exV;
     a.foc += (b.foc || 0); a.cup += (b.cup || 0);
     if (b.foc) a.focBk++;
+    if (b.cpn) {{ a.cpns = a.cpns || {{}}; a.cpns[b.cpn] = (a.cpns[b.cpn] || 0) + 1; }}
   }};
   for (const b of BOOKINGS) {{
     if (b.d < from || b.d > to || b.s !== 'CONFIRMED' || !b.vend) continue;
@@ -3340,12 +3351,15 @@ function renderVendPerf(from, to) {{
       <td style="text-align:right;color:#94a3b8">${{a.focBk}}</td>
       <td style="text-align:right;color:${{corFoc}}">${{dec(focPct, 1)}}%</td>
       <td style="text-align:right;color:#94a3b8">${{fR(a.cup)}}</td>
+      <td style="font-size:.72rem;color:#cbd5e1;white-space:normal;min-width:140px">${{
+        Object.entries(a.cpns || {{}}).sort((x, y) => y[1] - x[1]).map(([c, n]) => `${{escHtml(c)}} (${{n}})`).join(' · ') || '<span style="color:#64748b">—</span>'
+      }}</td>
       <td style="text-align:right;font-weight:600">${{fR(a.v - a.foc - a.cup)}}</td>
     </tr>`;
   }};
   const exLinhas = Object.entries(porEx).sort((x, y) => y[1].ex - x[1].ex);
   if (!totE.bk) {{
-    tbE.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:12px">Nenhuma reserva interna no período</td></tr>`;
+    tbE.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#94a3b8;padding:12px">Nenhuma reserva interna no período</td></tr>`;
     return;
   }}
   tbE.innerHTML = exLinhas.map(([n, a]) => linhaE(escHtml(n), a, a.un)).join('')
