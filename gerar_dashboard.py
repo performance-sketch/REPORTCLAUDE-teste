@@ -1372,6 +1372,11 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <div style="display:flex;gap:4px">
+          <button onclick="setClimaAgreg('dia')"    id="clima-ag-dia"    class="tab-btn active" style="padding:3px 10px;font-size:.72rem">Dia</button>
+          <button onclick="setClimaAgreg('semana')" id="clima-ag-semana" class="tab-btn"        style="padding:3px 10px;font-size:.72rem">Semana</button>
+          <button onclick="setClimaAgreg('mes')"    id="clima-ag-mes"    class="tab-btn"        style="padding:3px 10px;font-size:.72rem">Mês</button>
+        </div>
+        <div style="display:flex;gap:4px">
           <button onclick="setClimaMetrica('bk')"  id="clima-btn-bk"  class="tab-btn active" style="padding:3px 10px;font-size:.72rem">Bookings</button>
           <button onclick="setClimaMetrica('pax')" id="clima-btn-pax" class="tab-btn"        style="padding:3px 10px;font-size:.72rem">PAX</button>
         </div>
@@ -3257,7 +3262,13 @@ const _climaCache = {{}};
 let _climaMetrica = 'bk', _climaFrom = '', _climaTo = '', _climaBase = 'periodo';
 const _climaSeries = {{bk:true, ff:true, chuva:true}};
 const _climaSt = new Set(['Seco','Traço','Fraca','Moderada','Forte']);
-let _climaDraw = null;
+let _climaDraw = null, _climaAgreg = 'dia';
+function setClimaAgreg(a) {{
+  _climaAgreg = a;
+  ['dia','semana','mes'].forEach(v => {{ const b = document.getElementById('clima-ag-' + v); if (b) b.classList.toggle('active', v === a); }});
+  const det = document.getElementById('clima-dia'); if (det) det.style.display = 'none';
+  drawClimaChart();
+}}
 function climaToggleSerie(k) {{ _climaSeries[k] = !_climaSeries[k]; drawClimaChart(); }}
 function climaToggleStatus(k) {{
   if (_climaSt.has(k)) _climaSt.delete(k); else _climaSt.add(k);
@@ -3367,41 +3378,118 @@ function drawClimaChart() {{
     '<span style="width:1px;background:var(--border);margin:0 2px"></span>' +
     CLIMA_STATUS.map(x => chip(_climaSt.has(x.k), `climaToggleStatus('${{x.k}}')`, `<i style="display:inline-block;width:10px;height:10px;background:${{x.cor}};border-radius:2px"></i>`, `${{x.k}} (${{qtd(x.k)}})`)).join('') +
     `<span style="align-self:center;margin-left:4px">${{nVis}} de ${{dias.length}} dias</span>`;
+  const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const MESES_L = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const chave = d => {{
+    if (_climaAgreg === 'mes') return d.slice(0,7);
+    if (_climaAgreg === 'semana') {{ const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - x.getDay()); return x.toISOString().slice(0,10); }}
+    return d;
+  }};
+  const ordemSt = st => CLIMA_STATUS.findIndex(x => x.k === st);
+  const baldes = [];
+  for (const d of dias) {{
+    const k = chave(d);
+    let b = baldes[baldes.length - 1];
+    if (!b || b.k !== k) baldes.push(b = {{k, dias:[], vis:[], bk:0, ff:0, mm:0, temClima:false, chuva:0, pior:null, prev:0}});
+    b.dias.push(d);
+    if (!vis(d)) continue;
+    b.vis.push(d); b.bk += bookMap[d] || 0; b.ff += fulfMap[d] || 0;
+    const c = clima[d];
+    if (c) {{
+      b.temClima = true; b.mm += c.mm;
+      if (['Fraca','Moderada','Forte'].includes(c.st)) b.chuva++;
+      if (b.pior == null || ordemSt(c.st) > ordemSt(b.pior)) b.pior = c.st;
+      if (c.prev) b.prev++;
+    }}
+  }}
+  const dm = d => d.slice(8,10) + '/' + d.slice(5,7);
+  const rotulo = b => _climaAgreg === 'mes' ? MESES[+b.k.slice(5,7) - 1] + '/' + b.k.slice(2,4) : _climaAgreg === 'semana' ? 'sem ' + dm(b.k) : fAxis(b.k);
+  const titulo = b => _climaAgreg === 'mes' ? MESES_L[+b.k.slice(5,7) - 1] + '/' + b.k.slice(0,4)
+    : _climaAgreg === 'semana' ? `Semana de ${{dm(b.dias[0])}} a ${{dm(b.dias[b.dias.length - 1])}}` : b.k.slice(8,10) + '/' + b.k.slice(5,7) + '/' + b.k.slice(0,4);
+  const umDia = _climaAgreg === 'dia';
+  const mm1 = v => +v.toFixed(1);
   makeChart('chartClima', {{
     type: 'bar',
     data: {{
-      labels: dias.map(d => fAxis(d)),
+      labels: baldes.map(rotulo),
       datasets: [
-        {{ label:lblBk, hidden:!_climaSeries.bk, data:dias.map(d => vis(d) ? (bookMap[d] || 0) : null), backgroundColor:'rgba(99,102,241,.7)', borderRadius:3, yAxisID:'y', order:2 }},
-        {{ label:lblFf, hidden:!_climaSeries.ff, data:dias.map(d => vis(d) ? (fulfMap[d] || 0) : null), backgroundColor:'rgba(6,182,212,.75)', borderRadius:3, yAxisID:'y', order:2 }},
-        {{ label:'Chuva (mm)', hidden:!_climaSeries.chuva, type:'line', data:dias.map(d => clima[d] && vis(d) ? clima[d].mm : null), yAxisID:'y1', order:1,
+        {{ label:lblBk, hidden:!_climaSeries.bk, data:baldes.map(b => b.vis.length ? b.bk : null), backgroundColor:'rgba(99,102,241,.7)', borderRadius:3, yAxisID:'y', order:2 }},
+        {{ label:lblFf, hidden:!_climaSeries.ff, data:baldes.map(b => b.vis.length ? b.ff : null), backgroundColor:'rgba(6,182,212,.75)', borderRadius:3, yAxisID:'y', order:2 }},
+        {{ label: umDia ? 'Chuva (mm)' : 'Chuva no período (mm)', hidden:!_climaSeries.chuva, type:'line', data:baldes.map(b => b.temClima ? mm1(b.mm) : null), yAxisID:'y1', order:1,
            borderColor:'#93c5fd', backgroundColor:'rgba(147,197,253,.12)', fill:true, tension:0.3, borderWidth:2, spanGaps:false,
-           pointRadius:dias.map(d => clima[d] && clima[d].mm ? 3.5 : 2), pointHoverRadius:6,
-           pointBackgroundColor:dias.map(d => clima[d] ? cor(clima[d].st) : 'transparent'),
-           pointBorderColor:dias.map(d => clima[d] && clima[d].prev ? '#f59e0b' : '#93c5fd'), pointBorderWidth:dias.map(d => clima[d] && clima[d].prev ? 2 : 1) }},
+           pointRadius:baldes.map(b => b.mm ? (umDia ? 3.5 : 4.5) : 2), pointHoverRadius:7,
+           pointBackgroundColor:baldes.map(b => b.pior ? cor(b.pior) : 'transparent'),
+           pointBorderColor:baldes.map(b => b.prev ? '#f59e0b' : '#93c5fd'), pointBorderWidth:baldes.map(b => b.prev ? 2 : 1) }},
       ]
     }},
     options: {{
       responsive:true, interaction:{{mode:'index', intersect:false}},
       onClick: (ev, els, chart) => {{
         const pts = chart.getElementsAtEventForMode(ev, 'index', {{intersect:false}}, true);
-        if (pts.length) climaDetalheDia(dias[pts[0].index]);
+        if (!pts.length) return;
+        const b = baldes[pts[0].index];
+        if (umDia) climaDetalheDia(b.k); else climaDetalheBalde(b, titulo(b));
       }},
       plugins:{{
         legend:{{display:false}},
         tooltip:{{callbacks:{{
-          title: it => {{ const d = dias[it[0].dataIndex]; return d.slice(8,10) + '/' + d.slice(5,7) + '/' + d.slice(0,4); }},
+          title: it => titulo(baldes[it[0].dataIndex]),
           label: c => c.dataset.yAxisID === 'y1' ? ` Chuva: ${{(c.raw ?? 0).toLocaleString('pt-BR')}} mm` : ` ${{c.dataset.label}}: ${{c.raw}}`,
-          footer: it => {{ const c = clima[dias[it[0].dataIndex]]; return [c ? `${{c.st}} · pico ${{c.maxH.toLocaleString('pt-BR')}} mm/h · nuvens ${{c.nuv}}%${{c.prev ? ' · PREVISÃO' : ''}}` : 'sem dado de clima', 'Clique para ver o detalhe do dia']; }},
+          footer: it => {{
+            const b = baldes[it[0].dataIndex];
+            if (umDia) {{ const c = clima[b.k]; return [c ? `${{c.st}} · pico ${{c.maxH.toLocaleString('pt-BR')}} mm/h · nuvens ${{c.nuv}}%${{c.prev ? ' · PREVISÃO' : ''}}` : 'sem dado de clima', 'Clique para ver o detalhe do dia']; }}
+            return [`${{b.chuva}} de ${{b.vis.length}} dias com chuva` + (b.pior ? ` · mais forte: ${{b.pior}}` : '') + (b.prev ? ` · ${{b.prev}} dia(s) de previsão` : ''), 'Clique para ver os dias'];
+          }},
         }}}}
       }},
       scales:{{
         x:{{grid:{{display:false}}, ticks:{{maxTicksLimit:18}}}},
         y:{{grid:{{color:'rgba(51,65,85,.4)'}}, beginAtZero:true, title:{{display:true, text: pax ? 'PAX' : 'Reservas / voos'}}}},
-        y1:{{position:'right', beginAtZero:true, grid:{{display:false}}, title:{{display:true, text:'Chuva (mm)'}}}}
+        y1:{{position:'right', beginAtZero:true, grid:{{display:false}}, title:{{display:true, text: umDia ? 'Chuva (mm)' : 'Chuva no período (mm)'}}}}
       }}
     }}
   }});
+}}
+
+function climaDetalheBalde(b, titulo) {{
+  const box = document.getElementById('clima-dia');
+  if (!box || !_climaDraw) return;
+  const {{clima, bookMap, fulfMap, pax}} = _climaDraw;
+  const dec1 = v => v.toLocaleString('pt-BR', {{minimumFractionDigits:1, maximumFractionDigits:1}});
+  const item = (lbl, val) => `<div><div class="kpi-label">${{lbl}}</div><div style="font-weight:600;font-size:.95rem">${{val}}</div></div>`;
+  const cor = st => (CLIMA_STATUS.find(x => x.k === st) || CLIMA_STATUS[0]).cor;
+  const sem = ['dom','seg','ter','qua','qui','sex','sáb'];
+  const linhas = b.vis.map(d => {{
+    const c = clima[d];
+    return `<tr style="cursor:pointer" onclick="climaDetalheDia('${{d}}')" title="Ver o detalhe do dia">
+      <td>${{d.slice(8,10)}}/${{d.slice(5,7)}} <span style="color:#64748b">${{sem[new Date(d + 'T12:00:00').getDay()]}}</span></td>
+      <td>${{c ? `<span style="display:inline-block;width:9px;height:9px;background:${{cor(c.st)}};border-radius:2px;margin-right:5px"></span>${{c.st}}${{c.prev ? ' <span style="color:var(--amber)">(prev.)</span>' : ''}}` : '—'}}</td>
+      <td style="text-align:right">${{c ? c.mm.toLocaleString('pt-BR') + ' mm' : '—'}}</td>
+      <td style="text-align:right">${{bookMap[d] || 0}}</td>
+      <td style="text-align:right;color:var(--cyan)">${{fulfMap[d] || 0}}</td>
+    </tr>`;
+  }}).join('');
+  const n = b.vis.length || 1;
+  box.style.display = '';
+  box.innerHTML = `<div class="card" style="background:var(--surface2)">
+    <div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:10px">
+      <div style="font-weight:600;font-size:.85rem">📅 ${{titulo}}</div>
+      <button onclick="document.getElementById('clima-dia').style.display='none'" style="background:transparent;border:1px solid var(--border);color:var(--sub);border-radius:6px;padding:2px 10px;font-size:.72rem;cursor:pointer">✕ Fechar</button>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-3" style="margin-bottom:12px">
+      ${{item('Dias (visíveis)', b.vis.length)}}
+      ${{item('Dias com chuva', `${{b.chuva}} (${{Math.round(b.chuva / n * 100)}}%)`)}}
+      ${{item('Chuva no período', dec1(b.mm) + ' mm')}}
+      ${{item('Mais forte', b.pior || '—')}}
+      ${{item(pax ? 'PAX reservados' : 'Reservas feitas', `${{b.bk}} · ${{dec1(b.bk / n)}}/dia`)}}
+      ${{item(pax ? 'PAX voados' : 'Voos (fulfilments)', `${{b.ff}} · ${{dec1(b.ff / n)}}/dia`)}}
+    </div>
+    <div style="overflow-x:auto;max-height:260px;overflow-y:auto"><table>
+      <thead><tr><th>Dia</th><th>Status</th><th style="text-align:right">Chuva</th><th style="text-align:right">${{pax ? 'PAX reserv.' : 'Reservas'}}</th><th style="text-align:right">${{pax ? 'PAX voados' : 'Voos'}}</th></tr></thead>
+      <tbody>${{linhas || '<tr><td colspan="5" style="color:#94a3b8">Nenhum dia visível com os filtros atuais</td></tr>'}}</tbody>
+    </table></div>
+    <div style="font-size:.7rem;color:#64748b;margin-top:6px">Clique num dia da lista para ver o detalhe.</div>
+  </div>`;
 }}
 
 function climaDetalheDia(d) {{
