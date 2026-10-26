@@ -299,6 +299,57 @@ def buscar_instagram_dados(ig_id=None, page_token=None, dias=180):
     return resultado
 
 
+def _links_do_criativo(cr):
+    """URLs de destino declaradas no próprio criativo (link, carrossel, CTA ou Advantage+)."""
+    out = []
+    spec = cr.get("object_story_spec") or {}
+    ld = spec.get("link_data") or {}
+    out.append(ld.get("link"))
+    out += [ch.get("link") for ch in ld.get("child_attachments") or []]
+    for k in ("link_data", "video_data", "photo_data"):
+        out.append((((spec.get(k) or {}).get("call_to_action") or {}).get("value") or {}).get("link"))
+    out += [l.get("website_url") for l in (cr.get("asset_feed_spec") or {}).get("link_urls") or []]
+    out.append(cr.get("link_url"))
+    return [u for u in out if u]
+
+
+def buscar_links_anuncios(ad_ids):
+    """{ad_id: link de destino}. Anúncios feitos a partir de um post existente guardam o link
+    no CTA do post, que só é lido com o token da página dona do post."""
+    ids = sorted(ad_ids)
+    links, posts = {}, {}
+    for i in range(0, len(ids), 10):   # lotes maiores → "reduce the amount of data"
+        resp = _req(META_BASE, params={"access_token": META_TOKEN, "ids": ",".join(ids[i:i+10]),
+                                        "fields": "creative{object_story_spec,asset_feed_spec,link_url,effective_object_story_id}"}).json()
+        for ad_id, ad in resp.items():
+            cr = ad.get("creative") or {}
+            urls = _links_do_criativo(cr)
+            if urls:
+                links[ad_id] = urls[0]
+            elif cr.get("effective_object_story_id"):
+                posts.setdefault(cr["effective_object_story_id"], []).append(ad_id)
+    tokens = {p["id"]: p.get("access_token") for p in buscar_paginas()}
+    por_pagina = {}
+    for post in posts:
+        por_pagina.setdefault(post.split("_")[0], []).append(post)
+    for page_id, lista in por_pagina.items():
+        token = tokens.get(page_id)
+        if not token:
+            continue
+        for i in range(0, len(lista), 25):
+            try:
+                resp = _req(META_BASE, params={"access_token": token, "ids": ",".join(lista[i:i+25]), "fields": "call_to_action"}).json()
+            except Exception as e:
+                print(f"       AVISO links de posts da página {page_id}: {e}")
+                continue
+            for post, d in resp.items():
+                link = ((d.get("call_to_action") or {}).get("value") or {}).get("link")
+                if link:
+                    for ad_id in posts[post]:
+                        links[ad_id] = link
+    return links
+
+
 def buscar_meta_adsets_cupom(preset="last_30d"):
     """Retorna gasto dos conjuntos de anúncio com nome contendo 'carioquinha' ou 'voabrasil'."""
     resp = meta_get(f"{META_ACCOUNT}/insights", {
@@ -1340,6 +1391,32 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
           </tr>
         </thead>
         <tbody id="criativos-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Investimento por link de destino -->
+  <div class="card mt-5">
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <div style="font-weight:600;font-size:.9rem" id="links-title">🔗 Investimento por link de destino</div>
+      <span class="badge badge-gray">soma dos anúncios que levam a cada link · UTMs ignoradas</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Destino</th>
+            <th>Link</th>
+            <th style="text-align:right">Anúncios</th>
+            <th style="text-align:right">Investido</th>
+            <th style="text-align:right">% do total</th>
+            <th style="text-align:right">Impressões</th>
+            <th style="text-align:right">Cliques</th>
+            <th style="text-align:right">CTR</th>
+            <th style="text-align:right">CPC</th>
+          </tr>
+        </thead>
+        <tbody id="links-body"></tbody>
       </table>
     </div>
   </div>
@@ -2826,6 +2903,49 @@ function renderCriativos(from, to) {{
   }}
   const el = document.getElementById('criativos-body');
   if (el) el.innerHTML = html;
+  renderLinks(data, periodoLabel);
+}}
+
+// ─── Investimento por link de destino (mesmo período dos criativos) ─────────
+function rotuloLink(url) {{
+  if (!url) return 'Sem link (ação no app)';
+  const u = url.toLowerCase();
+  const min = u.match(/([0-9]+)[-_ ]?min/);
+  if (min && u.includes('verticalrio')) return 'Voo ' + min[1] + ' min';
+  if (u.includes('instagram.com')) return 'Perfil do Instagram';
+  if (u.includes('whatsapp') || u.includes('wa.me')) return 'WhatsApp';
+  if (u.includes('verticalrio')) return 'Site — outras páginas';
+  return 'Outros sites';
+}}
+
+function renderLinks(data, periodoLabel) {{
+  setText('links-title', '🔗 Investimento por link de destino — ' + periodoLabel);
+  const grupos = {{}};
+  let total = 0;
+  for (const a of data) {{
+    const link = a.link ? a.link.split('?')[0].replace(/[/]$/, '') : '';
+    const rotulo = rotuloLink(link);
+    // Voos somam todas as versões do link (idiomas, UTMs); o resto fica separado por URL
+    const g = grupos[rotulo.startsWith('Voo') ? rotulo : link] ||= {{links: new Set(), rotulo, ads: 0, gasto: 0, impr: 0, click: 0}};
+    if (link) g.links.add(link);
+    g.ads++; g.gasto += a.gasto; g.impr += a.impr; g.click += a.click;
+    total += a.gasto;
+  }}
+  const linhas = Object.values(grupos).sort((x, y) => y.gasto - x.gasto);
+  const el = document.getElementById('links-body');
+  if (!el) return;
+  if (!data.some(a => 'link' in a)) {{
+    el.innerHTML = '<tr><td colspan="9" style="color:#94a3b8;font-size:.8rem">Links ainda não coletados — aparecem na próxima atualização dos dados.</td></tr>';
+    return;
+  }}
+  const td = (v, s = '') => `<td style="text-align:right;${{s}}">${{v}}</td>`;
+  el.innerHTML = linhas.map(g => `<tr>
+      <td style="font-weight:600;white-space:nowrap">${{escHtml(g.rotulo)}}</td>
+      <td style="font-size:.75rem;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${{escHtml([...g.links].join(' · '))}}">${{[...g.links].map(l => `<a href="${{escHtml(l)}}" target="_blank" rel="noopener" style="color:#06b6d4">${{escHtml(l.replace(/^https?:[/][/](www[.])?/, ''))}}</a>`).join('<br>') || '—'}}</td>
+      ${{td(g.ads)}}${{td(fBRL(g.gasto), 'font-weight:600')}}${{td(total ? (g.gasto / total * 100).toFixed(1) + '%' : '—', 'color:#94a3b8')}}
+      ${{td(fN(g.impr))}}${{td(fN(g.click))}}${{td(g.impr ? (g.click / g.impr * 100).toFixed(2) + '%' : '—', 'color:#06b6d4')}}${{td(g.click ? fBRL(g.gasto / g.click) : '—')}}
+    </tr>`).join('') + `<tr style="border-top:1px solid rgba(148,163,184,.3)">
+      <td style="font-weight:700">Total</td><td></td>${{td(data.length, 'font-weight:700')}}${{td(fBRL(total), 'font-weight:700')}}${{td('100%', 'color:#94a3b8')}}<td colspan="4"></td></tr>`;
 }}
 
 // ─── Cupons — multi-select e comparação ──────────────────────────────────────
@@ -4414,6 +4534,14 @@ def main():
         criativos_d90 = buscar_meta_criativos("last_90d")
         criativos = {"d7": criativos_d7, "d14": criativos_d14, "d30": criativos_d30, "d90": criativos_d90}
         print(f"       {len(criativos_d30)} criativos ativos (30d)")
+        try:
+            links = buscar_links_anuncios({a["id"] for lista in criativos.values() for a in lista})
+            for lista in criativos.values():
+                for a in lista:
+                    a["link"] = links.get(a["id"])
+            print(f"       Links de destino: {len(links)} anúncios")
+        except Exception as e:
+            print(f"       AVISO links de destino: {e}")
 
         cupom_meta = buscar_meta_adsets_cupom("last_30d")
         print(f"       Cupons Meta: carioquinha R${cupom_meta.get('CARIOQUINHA',0):,.2f} | voabrasil R${cupom_meta.get('VOABRASIL',0):,.2f}")
