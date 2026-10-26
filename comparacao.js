@@ -355,9 +355,10 @@
     if (A.ini > hoje() || B.ini > hoje()) { msg.textContent = 'Os períodos precisam começar até hoje — não há dados de datas futuras.'; return; }
     const dataMin = typeof D90_FROM === 'string' ? D90_FROM : '2025-01-01';
     if (A.ini < dataMin || B.ini < dataMin) { msg.textContent = `Há dados a partir de ${br(dataMin)}.`; return; }
-    if (S.preset !== 'personalizado' && (A.ini !== S.A.ini || A.fim !== S.A.fim || B.ini !== S.B.ini || B.fim !== S.B.fim)) {
-      S.preset = 'personalizado'; A.nome = 'Período A'; B.nome = 'Período B';
-    }
+    const mudou = A.ini !== S.A.ini || A.fim !== S.A.fim || B.ini !== S.B.ini || B.fim !== S.B.fim;
+    if (S.preset !== 'personalizado' && mudou) { S.preset = 'personalizado'; A.nome = 'Período A'; B.nome = 'Período B'; }
+    // Datas novas → mesmo critério dos atalhos: proporcional só se algum período ainda estiver em andamento
+    if (mudou) S.prop = A.fim > hoje() || B.fim > hoje();
     S.A = A; S.B = B;
     msg.textContent = 'Carregando dados…';
     try { await carregar(); } catch (_) { msg.textContent = 'Não foi possível carregar os dados da comparação.'; return; }
