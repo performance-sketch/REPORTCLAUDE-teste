@@ -3905,16 +3905,19 @@ function renderHeatmap(from, to) {{
   // Matriz montada das reservas CONFIRMED criadas no período selecionado
   const HEATMAP = {{}};
   let totalRes = 0;
+  // Período todo no futuro (meses ✈): ainda não há reservas feitas nele → filtra pela data do voo
+  const porVoo = !!from && from > HOJE;
   for (const b of BOOKINGS) {{
     if (b.s !== 'CONFIRMED' || !b.t) continue;
-    if (from && (b.d < from || b.d > to)) continue;
+    const ref = porVoo ? b.t : b.d;
+    if (from && (ref < from || ref > to)) continue;
     const cm = b.d.slice(0,7), tm = b.t.slice(0,7);
     const row = HEATMAP[cm] || (HEATMAP[cm] = {{}});
     row[tm] = (row[tm] || 0) + 1;
     totalRes++;
   }}
   const badge = document.getElementById('heatmap-badge');
-  if (badge && from) badge.textContent = `reservas feitas de ${{from.slice(8,10)}}/${{from.slice(5,7)}}/${{from.slice(2,4)}} a ${{to.slice(8,10)}}/${{to.slice(5,7)}}/${{to.slice(2,4)}} · ${{totalRes}} reservas · linhas = mês da reserva · colunas = mês do voo`;
+  if (badge && from) badge.textContent = `${{porVoo ? 'voos' : 'reservas feitas'}} de ${{from.slice(8,10)}}/${{from.slice(5,7)}}/${{from.slice(2,4)}} a ${{to.slice(8,10)}}/${{to.slice(5,7)}}/${{to.slice(2,4)}} · ${{totalRes}} reservas · linhas = mês da reserva · colunas = mês do voo`;
   const allCreated = Object.keys(HEATMAP).sort();
   // Collect all tour months
   const tourSet = new Set();
