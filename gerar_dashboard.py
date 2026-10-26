@@ -1559,6 +1559,10 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
     <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
       <div style="font-weight:600;font-size:.9rem">📅 Quando Reservaram → Para Qual Mês Voaram?</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;gap:4px">
+          <button onclick="setHeatModo('bookings')" id="heat-modo-bookings" class="tab-btn active" style="padding:3px 10px;font-size:.72rem">Bookings</button>
+          <button onclick="setHeatModo('pax')"      id="heat-modo-pax"      class="tab-btn"        style="padding:3px 10px;font-size:.72rem">PAX</button>
+        </div>
         <span class="badge badge-gray" id="heatmap-badge">linhas = mês da reserva · colunas = mês do voo · cor = volume</span>
         <button id="heatmap-toggle" onclick="toggleCard('heatmap-body','heatmap-toggle')" style="background:var(--surface2);border:1px solid var(--border);color:var(--sub);border-radius:6px;padding:4px 12px;font-size:.75rem;cursor:pointer">▲ Minimizar</button>
       </div>
@@ -3900,6 +3904,14 @@ function renderVendedores(from, to) {{
   }}).join('');
 }}
 
+// Bookings = nº de reservas · PAX = soma de passageiros das reservas
+let _heatModo = 'bookings';
+function setHeatModo(m) {{
+  _heatModo = m;
+  ['bookings','pax'].forEach(v => {{ const b = document.getElementById('heat-modo-' + v); if (b) b.classList.toggle('active', v === m); }});
+  renderHeatmap(currentFrom, currentTo);
+}}
+
 function renderHeatmap(from, to) {{
   const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   // Matriz montada das reservas CONFIRMED criadas no período selecionado
@@ -3913,11 +3925,12 @@ function renderHeatmap(from, to) {{
     if (from && (ref < from || ref > to)) continue;
     const cm = b.d.slice(0,7), tm = b.t.slice(0,7);
     const row = HEATMAP[cm] || (HEATMAP[cm] = {{}});
-    row[tm] = (row[tm] || 0) + 1;
-    totalRes++;
+    const q = _heatModo === 'pax' ? (b.px || 0) : 1;
+    row[tm] = (row[tm] || 0) + q;
+    totalRes += q;
   }}
   const badge = document.getElementById('heatmap-badge');
-  if (badge && from) badge.textContent = `${{porVoo ? 'voos' : 'reservas feitas'}} de ${{from.slice(8,10)}}/${{from.slice(5,7)}}/${{from.slice(2,4)}} a ${{to.slice(8,10)}}/${{to.slice(5,7)}}/${{to.slice(2,4)}} · ${{totalRes}} reservas · linhas = mês da reserva · colunas = mês do voo`;
+  if (badge && from) badge.textContent = `${{porVoo ? 'voos' : 'reservas feitas'}} de ${{from.slice(8,10)}}/${{from.slice(5,7)}}/${{from.slice(2,4)}} a ${{to.slice(8,10)}}/${{to.slice(5,7)}}/${{to.slice(2,4)}} · ${{totalRes}} ${{_heatModo === 'pax' ? 'PAX' : 'reservas'}} · linhas = mês da reserva · colunas = mês do voo`;
   const allCreated = Object.keys(HEATMAP).sort();
   // Collect all tour months
   const tourSet = new Set();
@@ -3960,7 +3973,7 @@ function renderHeatmap(from, to) {{
     tbl += `<tr><td style="padding:4px 10px;color:#94a3b8;white-space:nowrap;font-weight:500">${{fmtYM(cm)}}</td>`;
     for (const tm of allTour) {{
       const v = (HEATMAP[cm] || {{}})[tm] || 0;
-      const tip = v ? `${{v}} reserva${{v>1?'s':''}} feitas em ${{fmtYM(cm)}} para voos em ${{fmtYM(tm)}}` : '';
+      const tip = v ? `${{v}} ${{_heatModo === 'pax' ? 'PAX em reservas' : 'reserva' + (v>1?'s':'')}} feitas em ${{fmtYM(cm)}} para voos em ${{fmtYM(tm)}}` : '';
       tbl += `<td title="${{tip}}" style="padding:6px 8px;text-align:center;border-radius:4px;${{heatColor(v)}};min-width:44px;cursor:${{v?'default':''}}">${{v||''}}</td>`;
     }}
     tbl += '</tr>';
