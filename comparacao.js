@@ -16,7 +16,7 @@
   const STATUS = {C: 'Confirmados', A: 'Abandonados', X: 'Cancelados', H: 'On Hold', O: 'Outros'};
   const GATEWAYS = {PAYPAL: 'PayPal', CREDITCARD: 'Cartão de crédito', BANKTRANSFER: 'Transferência', CASH: 'Dinheiro', VOUCHER: 'Voucher', OTHER: 'Outros', EXTERNAL: 'Externo (marketplace)'};
   const NAO_RECEBIDO = ['FREE', 'PROMO_CODE', 'REFUND'];     // cortesia (FOC), cupom e estorno: não são recebimento
-  const S = {modo: 'padrao', preset: 'ciclo', prop: false, A: null, B: null, dados: null, carregando: null, aplicado: null, min: false};
+  const S = {modo: 'padrao', preset: 'mes-ant-yoy', prop: false, A: null, B: null, dados: null, carregando: null, aplicado: null, min: false};
   const MIN_KEY = 'vr_cmp_minimizado';
   try { S.min = localStorage.getItem(MIN_KEY) === '1'; } catch (_) {}
 
@@ -39,8 +39,6 @@
     const lista = {
       'mes-ant-yoy': {rotulo: `${MESES[ant.m - 1]} ${ant.y} × ${MESES[ant.m - 1]} ${ant.y - 1}`, A: c({y: ant.y - 1, m: ant.m}), B: c(ant)},
       'mes-atual-yoy': {rotulo: `${MESES[atual.m - 1]} ${atual.y} × ${MESES[atual.m - 1]} ${atual.y - 1}`, A: c({y: atual.y - 1, m: atual.m}), B: c(atual)},
-      'ciclo': {rotulo: 'Ciclo atual × Ciclo anterior', A: c(ant, `Ciclo ${ciclo(ant.y, ant.m).nome}`), B: c(atual, `Ciclo ${ciclo(atual.y, atual.m).nome}`)},
-      '30d': {rotulo: 'Últimos 30 dias × 30 dias anteriores', A: {ini: mais(hoje(), -59), fim: mais(hoje(), -30), nome: '30 dias anteriores'}, B: {ini: mais(hoje(), -29), fim: hoje(), nome: 'Últimos 30 dias'}},
       'personalizado': {rotulo: 'Personalizado'},
     };
     return lista;
@@ -445,7 +443,7 @@
         try { localStorage.setItem(MIN_KEY, S.min ? '1' : '0'); } catch (_) {}
         return renderBarra();
       }
-      if (d.modo) { if (d.modo === 'padrao') return restaurar(); S.modo = 'personalizada'; if (!S.A) usarPreset('ciclo'); render(); }
+      if (d.modo) { if (d.modo === 'padrao') return restaurar(); S.modo = 'personalizada'; if (!S.A) usarPreset('mes-ant-yoy'); render(); }
       else if (d.prop) { S.prop = d.prop === '1'; if (S.aplicado) aplicar(); else render(); }
       else if (d.preset) { usarPreset(d.preset); render(); if (d.preset !== 'personalizado') aplicar(); }
       else if ('aplicar' in d) aplicar();
