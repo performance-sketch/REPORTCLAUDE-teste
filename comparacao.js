@@ -204,7 +204,9 @@
   function renderResultado() {
     const box = document.getElementById('cmp-res');
     if (S.modo !== 'personalizada' || !S.aplicado) { box.innerHTML = ''; return; }
-    const ef = S.aplicado, a = calcular(ef.A.ini, ef.A.fimEf, ef.A.fim), b = calcular(ef.B.ini, ef.B.fimEf, ef.B.fim);
+    // Fulfilments: no modo proporcional seguem a parcial (mesmos dias); no absoluto, o período inteiro com os agendados
+    const ef = S.aplicado, vInt = !S.prop;
+    const a = calcular(ef.A.ini, ef.A.fimEf, vInt ? ef.A.fim : ef.A.fimEf), b = calcular(ef.B.ini, ef.B.fimEf, vInt ? ef.B.fim : ef.B.fimEf);
     const shareRec = (r, c) => r.bruta ? r.canal[c].receita / r.bruta * 100 : null;
     const shareBk = (r, c) => r.bookings ? r.canal[c].bookings / r.bookings * 100 : null;
     const tk = (r, c) => r.canal[c].bookings ? r.canal[c].receita / r.canal[c].bookings : null;
@@ -242,17 +244,17 @@
           `Ticket médio Online × Interno — A: ${brl(tk(a, 'O'))} × ${brl(tk(a, 'I'))} · B: ${brl(tk(b, 'O'))} × ${brl(tk(b, 'I'))}. Negotiated Rate = marketplaces com tarifa negociada (GetYourGuide).`)}
       </div>
 
-      <div class="cmp-sec"><div class="cmp-st">Fulfilments <span>· pela data do voo (Fulfilment Date) · período inteiro, inclusive voos agendados</span></div>
+      <div class="cmp-sec"><div class="cmp-st">Fulfilments <span>· pela data do voo (Fulfilment Date) · ${vInt ? 'período inteiro, inclusive voos agendados' : `parcial · mesmos ${ef.B.dias} dias nos dois períodos`}</span></div>
         <div class="cmp-grid">
-          ${cartao('Voos realizados', a.voos.realizados, b.voos.realizados, x => num(x), 1, 'Reservas confirmadas com voo no período e antes de hoje', true)}
-          ${cartao('Voos agendados', a.voos.agendados, b.voos.agendados, x => num(x), 1, 'Reservas confirmadas com voo a partir de hoje até o fim do período', true)}
-          ${cartao('PAX voando', a.voos.pax, b.voos.pax, x => num(x), 1, '', true)}
+          ${cartao('Voos realizados', a.voos.realizados, b.voos.realizados, x => num(x), 1, 'Reservas confirmadas com voo no período e antes de hoje', vInt)}
+          ${cartao('Voos agendados', a.voos.agendados, b.voos.agendados, x => num(x), 1, 'Reservas confirmadas com voo a partir de hoje até o fim do período', vInt)}
+          ${cartao('PAX voando', a.voos.pax, b.voos.pax, x => num(x), 1, '', vInt)}
           ${cartao('PAX por booking', a.paxPorBooking, b.paxPorBooking, x => num(x, 2), 1, 'Pela data da reserva')}
-          ${cartao('Horas de voo reservadas', a.voos.minutos / 60, b.voos.minutos / 60, x => num(x, 1) + ' h', 1, 'Soma da duração de cada reserva', true)}
+          ${cartao('Horas de voo reservadas', a.voos.minutos / 60, b.voos.minutos / 60, x => num(x, 1) + ' h', 1, 'Soma da duração de cada reserva', vInt)}
         </div>
         ${tabela('Mix de produtos (voos no período)', mix.map(p => linha(esc(p), a.voos.mix[p] || 0, b.voos.mix[p] || 0, x => num(x)) +
           linha(`↳ participação`, totVoos(a) ? (a.voos.mix[p] || 0) / totVoos(a) * 100 : null, totVoos(b) ? (b.voos.mix[p] || 0) / totVoos(b) * 100 : null, x => pct(x), 0, true)).join('') || '<tr><td colspan="4">Sem voos no período.</td></tr>',
-          `"Voos" = reservas com voo na data (um voo compartilhado conta uma vez por reserva). Horas = soma da duração informada no Rezdy por reserva${a.voos.semDuracao + b.voos.semDuracao ? `; ${a.voos.semDuracao + b.voos.semDuracao} reservas sem duração não entram` : ''}.${fulfilIncompleto ? ' ⚠ Voos até fev/2025 podem estar incompletos: reservas feitas antes de 2025 não estão nos dados.' : ''}`, true)}
+          `"Voos" = reservas com voo na data (um voo compartilhado conta uma vez por reserva). Horas = soma da duração informada no Rezdy por reserva${a.voos.semDuracao + b.voos.semDuracao ? `; ${a.voos.semDuracao + b.voos.semDuracao} reservas sem duração não entram` : ''}.${fulfilIncompleto ? ' ⚠ Voos até fev/2025 podem estar incompletos: reservas feitas antes de 2025 não estão nos dados.' : ''}`, vInt)}
       </div>
 
       <div class="cmp-sec"><div class="cmp-st">Conversão e pagamentos</div>
