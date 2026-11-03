@@ -14,7 +14,7 @@
   const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const CANAIS = {O: 'Online', I: 'Interno', N: 'Negotiated Rate'};
   const STATUS = {C: 'Confirmados', A: 'Abandonados', X: 'Cancelados', H: 'On Hold', O: 'Outros'};
-  const GATEWAYS = {PAYPAL: 'PayPal', CREDITCARD: 'Cartão de crédito', BANKTRANSFER: 'Transferência', CASH: 'Dinheiro', VOUCHER: 'Voucher', OTHER: 'Outros', EXTERNAL: 'Externo (marketplace)'};
+  const GATEWAYS = {STRIPE: 'Stripe', PAYPAL: 'PayPal', REDE: 'Rede (maquininha, link e Pix)', GYG: 'GetYourGuide', PIX: 'Pix (gateway não informado)', CASH: 'Dinheiro', CARTAO: 'Cartão (gateway não informado)', OTHER: 'Outros'};
   const NAO_RECEBIDO = ['FREE', 'PROMO_CODE', 'REFUND'];     // cortesia (FOC), cupom e estorno: não são recebimento
   const S = {modo: 'padrao', preset: 'mes-ant-yoy', prop: false, A: null, B: null, dados: null, carregando: null, aplicado: null, min: false};
   const MIN_KEY = 'vr_cmp_minimizado';
@@ -39,6 +39,8 @@
     const lista = {
       'mes-ant-yoy': {rotulo: `${MESES[ant.m - 1]} ${ant.y} × ${MESES[ant.m - 1]} ${ant.y - 1}`, A: c({y: ant.y - 1, m: ant.m}), B: c(ant)},
       'mes-atual-yoy': {rotulo: `${MESES[atual.m - 1]} ${atual.y} × ${MESES[atual.m - 1]} ${atual.y - 1}`, A: c({y: atual.y - 1, m: atual.m}), B: c(atual)},
+      // Ciclo atual × ciclo imediatamente anterior (ex.: Nov 2026 × Out 2026); em andamento → proporcional
+      'ciclo-mom': {rotulo: `Ciclo ${MESES[atual.m - 1]} ${atual.y} × Ciclo ${MESES[ant.m - 1]} ${ant.y}`, A: c(ant, `Ciclo ${ciclo(ant.y, ant.m).nome}`), B: c(atual, `Ciclo ${ciclo(atual.y, atual.m).nome}`)},
       'personalizado': {rotulo: 'Personalizado'},
     };
     return lista;
@@ -262,7 +264,7 @@
         ${tabela('Valores recebidos por meio de pagamento', gws.map(g =>
           linha(esc(GATEWAYS[g] || g), a.gateway[g] || 0, b.gateway[g] || 0, brl0) +
           linha('↳ participação', gTot(a) ? (a.gateway[g] || 0) / gTot(a) * 100 : null, gTot(b) ? (b.gateway[g] || 0) / gTot(b) * 100 : null, x => pct(x), 0, true)).join(''),
-          'No Rezdy, os cartões aparecem como "CREDITCARD" (o processador, ex.: Stripe, não é identificado). Cortesias, cupons e estornos não entram aqui — veja Receita adicional.')}
+          'Gateway identificado pela descrição de cada pagamento no Rezdy (Stripe, PayPal, Rede, GetYourGuide...). Cortesias, cupons e estornos não entram aqui — veja Receita adicional.')}
       </div>
 
       <div class="cmp-sec"><div class="cmp-st">Receita adicional</div>

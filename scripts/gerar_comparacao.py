@@ -15,7 +15,10 @@ Formato de cada linha em "b":
   [n, d, s, c, v]                              — reservas não confirmadas
   [n, d, s, c, v, com, pagamentos, itens]      — confirmadas
     s: C confirmada · A carrinho abandonado · X cancelada · H on hold · O outros
-    pagamentos: {tipo: valor}  (PAYPAL, CREDITCARD, FREE = cortesia/FOC, PROMO_CODE, REFUND, ...)
+    pagamentos: {gateway: valor} — gateway identificado pelo label do pagamento no Rezdy:
+                STRIPE, PAYPAL, REDE (maquininha/link/Pix Rede), GYG (GetYourGuide), PIX (sem gateway
+                informado), CASH, CARTAO (cartão sem gateway informado), OTHER;
+                não recebidos: FREE = cortesia/FOC, PROMO_CODE = cupom, REFUND = estorno
     itens: [[produto, data_do_voo, duracao_min, pax, [[extra, qtd, receita], ...], valor_do_item], ...]
            produto e extra são índices de "produtos" e "extras".
 
@@ -25,6 +28,7 @@ Variável de ambiente: REZDY_API_KEY (ou REZDY_KEY)
 import json
 import os
 import pathlib
+import re
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -86,6 +90,31 @@ def pax_item(item):
     return sum(int(q.get("value") or 0) for q in item.get("quantities") or []) or int(item.get("totalQuantity") or 0)
 
 
+def gateway_pagamento(p):
+    """Gateway pelo label do pagamento (o tipo do Rezdy só diz CREDITCARD/PAYPAL/BANKTRANSFER...)."""
+    t = (p.get("type") or "OTHER").upper()
+    if t in ("FREE", "PROMO_CODE", "REFUND"):
+        return t
+    lab = (p.get("label") or "").lower()
+    if "stripe" in lab:
+        return "STRIPE"
+    if "paypal" in lab or t == "PAYPAL":
+        return "PAYPAL"
+    if "gyg" in lab or "getyourguide" in lab:
+        return "GYG"
+    if re.search(r"\brede\b", lab):
+        return "REDE"
+    if t == "CREDITCARD" and re.search(r"m.quin|terminal", lab):
+        return "REDE"            # maquininha do terminal é da Rede
+    if "pix" in lab or t == "BANKTRANSFER":
+        return "PIX"
+    if t == "CASH" or "dinheiro" in lab or "cash" in lab:
+        return "CASH"
+    if t == "CREDITCARD":
+        return "CARTAO"
+    return "OTHER"
+
+
 def receita_extra(e):
     preco, qtd = float(e.get("price") or 0), int(e.get("quantity") or 0)
     # QUANTITY: preço por unidade; demais tipos: preço do extra inteiro
@@ -114,7 +143,7 @@ def main():
             continue
         pag = {}
         for p in b.get("payments") or []:
-            t = (p.get("type") or "OTHER").upper()
+            t = gateway_pagamento(p)
             pag[t] = round(pag.get(t, 0) + abs(float(p.get("amount") or 0)), 2)
         itens = []
         for it in b.get("items") or []:

@@ -111,7 +111,7 @@
     </div>
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <div style="font-size:.75rem;color:var(--sub)">
-        <span style="color:var(--green)">●</span> Gerado em <strong style="color:var(--text)">03/11/2026 08:32</strong>
+        <span style="color:var(--green)">●</span> Gerado em <strong style="color:var(--text)">03/11/2026 08:57</strong>
       </div>
       <div style="position:relative">
         <button id="refresh-btn" onclick="toggleRefreshMenu(event)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 12px;font-size:.75rem;cursor:pointer;display:flex;align-items:center;gap:6px">
@@ -135,6 +135,9 @@
       <button class="tab-btn active" onclick="switchTab('visao',this)">Visão Geral</button>
       <button class="tab-btn" onclick="switchTab('meta',this)">Meta Ads</button>
       <button class="tab-btn" onclick="switchTab('rezdy',this)">Rezdy Bookings</button>
+      <span style="width:1px;background:var(--border);margin:0 4px"></span>
+      <button class="tab-btn" onclick="vrMinimizarTodos(true)"  title="Recolhe todos os cards, deixando só os títulos">⊟ Minimizar todos</button>
+      <button class="tab-btn" onclick="vrMinimizarTodos(false)" title="Abre todos os cards">⊞ Expandir todos</button>
     </div>
     <!-- Date range picker global -->
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -228,10 +231,10 @@
   <!-- VALORES RECEBIDOS POR MEIO DE PAGAMENTO -->
   <div class="mb-2" style="font-size:.7rem;color:var(--sub);text-transform:uppercase;letter-spacing:.08em">Valores recebidos por meio de pagamento</div>
   <div class="card mb-6" id="vg-pag">
-    <div style="font-weight:600;font-size:.9rem;margin-bottom:14px">Recebido por gateway <span style="font-weight:400;color:var(--sub);font-size:.75rem">· pagamentos das reservas confirmadas no período selecionado (pela data da reserva)</span></div>
+    <div style="font-weight:600;font-size:.9rem;margin-bottom:14px">Recebido por gateway <span style="font-weight:400;color:var(--sub);font-size:.75rem">· pagamentos das reservas confirmadas no período selecionado (pela data da reserva) · Stripe, PayPal, Rede, GetYourGuide e outros</span></div>
     <div style="overflow-x:auto">
       <table class="vg-pag-tb">
-        <thead><tr><th>Meio de pagamento</th><th style="width:40%"></th><th class="r">Valor recebido</th><th class="r">% do recebido</th><th class="r">Pedidos</th></tr></thead>
+        <thead><tr><th>Gateway</th><th style="width:40%"></th><th class="r">Valor recebido</th><th class="r">% do recebido</th><th class="r">Pedidos</th></tr></thead>
         <tbody id="vg-pag-body"><tr><td colspan="5" style="color:var(--sub)">Carregando pagamentos…</td></tr></tbody>
       </table>
     </div>
@@ -838,7 +841,7 @@
 </main>
 
 <footer class="border-t" style="border-color:var(--border);padding:20px 24px;text-align:center;font-size:.73rem;color:var(--sub)">
-  Vertical Rio Marketing Dashboard · Meta Ads Graph API + Rezdy API · 03/11/2026 08:32
+  Vertical Rio Marketing Dashboard · Meta Ads Graph API + Rezdy API · 03/11/2026 08:57
 </footer>
 
 <!-- ═══════════════════════════ DATA ══════════════════════════════════════ -->
@@ -1408,8 +1411,7 @@ function renderCanais(from, to) {
 // ─── Valores recebidos por meio de pagamento (gateways do Rezdy) ─────────────
 // Dados: data/comparacao.json (pagamentos de cada reserva confirmada, por tipo).
 // FREE (cortesia/FOC), PROMO_CODE (cupom) e REFUND (estorno) não são recebimento.
-const GATEWAYS_VG = { PAYPAL:'PayPal', CREDITCARD:'Cartão de crédito', BANKTRANSFER:'Transferência bancária',
-  CASH:'Dinheiro', VOUCHER:'Voucher', EXTERNAL:'Externo (marketplace)', OTHER:'Outros' };
+const GATEWAYS_VG = { STRIPE: 'Stripe', PAYPAL: 'PayPal', REDE: 'Rede (maquininha, link e Pix)', GYG: 'GetYourGuide', PIX: 'Pix (gateway não informado)', CASH: 'Dinheiro', CARTAO: 'Cartão (gateway não informado)', OTHER: 'Outros' };
 const NAO_RECEBIDO_VG = { FREE:'Cortesia (FOC)', PROMO_CODE:'Cupom de desconto', REFUND:'Estornos' };
 let _pagDados = null, _pagCarregando = null;
 function renderPagamentos(from, to) {
@@ -3485,6 +3487,70 @@ function vrCopyAnnotationMsg(evt) {
   if (dateEl) dateEl.value = new Date().toISOString().slice(0,10);
   const countEl = document.getElementById('vrAnnCount');
   if (countEl) countEl.textContent = ANNOTATIONS_ALL.length || '';
+})();
+</script>
+<style>
+  .vr-card-tg { background:none; border:1px solid var(--border); color:var(--sub); border-radius:6px; width:22px; height:22px;
+    font-size:.7rem; line-height:1; cursor:pointer; margin-right:8px; flex:none; vertical-align:middle; display:inline-flex;
+    align-items:center; justify-content:center; padding:0 }
+  .vr-card-tg:hover { color:var(--text); border-color:var(--sub) }
+  .card.vr-min > :not(.vr-card-head) { display:none !important }
+  .card.vr-min > .vr-card-head { margin-bottom:0 !important }
+  .card.vr-min { padding-top:12px; padding-bottom:12px }
+</style>
+<script>
+// ─── Minimizar / expandir cards (estado salvo neste navegador) ──────────────
+(function () {
+  const CHAVE = 'vr-cards-minimizados';
+  let salvos;
+  try { salvos = new Set(JSON.parse(localStorage.getItem(CHAVE) || '[]')); } catch (e) { salvos = new Set(); }
+  const gravar = () => { try { localStorage.setItem(CHAVE, JSON.stringify([...salvos])); } catch (e) {} };
+  const tituloDe = card => (card.querySelector('.vr-card-head')?.textContent || '').replace(/[▾▸]/g, '').trim().slice(0, 80);
+
+  function aplicar(card, min) {
+    card.classList.toggle('vr-min', min);
+    const b = card.querySelector(':scope > .vr-card-head .vr-card-tg');
+    if (b) { b.textContent = min ? '▸' : '▾'; b.title = min ? 'Expandir card' : 'Minimizar card'; }
+  }
+
+  function preparar(card) {
+    if (card.dataset.vrMin) return;
+    const head = card.firstElementChild;
+    // Só cards com título + conteúdo (pula os KPIs pequenos)
+    if (!head || card.children.length < 2 || head.classList.contains('kpi-label') || !head.textContent.trim()) return;
+    card.dataset.vrMin = '1';
+    head.classList.add('vr-card-head');
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'vr-card-tg';
+    b.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const min = !card.classList.contains('vr-min');
+      aplicar(card, min);
+      const t = tituloDe(card); if (t) { min ? salvos.add(t) : salvos.delete(t); gravar(); }
+    });
+    // título em linha flex: botão entra antes do 1º item; senão, antes do texto
+    const alvo = getComputedStyle(head).display.includes('flex') && head.firstElementChild ? head.firstElementChild : head;
+    alvo.insertBefore(b, alvo.firstChild);
+    aplicar(card, salvos.has(tituloDe(card)));
+  }
+
+  const prepararTodos = () => document.querySelectorAll('.card').forEach(preparar);
+
+  window.vrMinimizarTodos = function (min) {
+    prepararTodos();
+    document.querySelectorAll('.card[data-vr-min]').forEach(card => {
+      aplicar(card, min);
+      const t = tituloDe(card); if (t) min ? salvos.add(t) : salvos.delete(t);
+    });
+    gravar();
+  };
+
+  // Cards criados depois (ex.: Comparação de Períodos) também ganham o botão
+  let pend = null;
+  new MutationObserver(() => { clearTimeout(pend); pend = setTimeout(prepararTodos, 150); })
+    .observe(document.body, { childList:true, subtree:true });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', prepararTodos);
+  else prepararTodos();
 })();
 </script>
 <script src="comparacao.js"></script>
