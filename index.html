@@ -701,10 +701,13 @@
   </div>
 
   <div class="card mb-5">
-    <div style="font-weight:600;font-size:.9rem;margin-bottom:16px">Por Produto</div>
+    <div style="font-weight:600;font-size:.9rem;margin-bottom:16px">Por Produto <span id="prod-periodos" style="font-weight:400;color:var(--sub);font-size:.75rem"></span></div>
     <div style="overflow-x:auto">
       <table>
-        <thead><tr><th>Produto</th><th style="text-align:right">Ordens</th><th style="text-align:right">Confirmadas</th><th style="text-align:right">Receita</th><th style="text-align:right">Tx Conv.</th></tr></thead>
+        <thead><tr><th>Produto</th>
+          <th style="text-align:right">Confirmadas</th><th style="text-align:right">Ant.</th><th style="text-align:right">Var.</th>
+          <th style="text-align:right">Receita</th><th style="text-align:right">Ant.</th><th style="text-align:right">Var.</th>
+          <th style="text-align:right">Ticket médio</th><th style="text-align:right">Var.</th></tr></thead>
         <tbody id="prod-body"></tbody>
       </table>
     </div>
@@ -1580,7 +1583,7 @@ function applyDateRange(from, to, prev, fulfilTo) {
 
   // ── Tabelas e gráficos dinâmicos ──
   renderCampanhas(from, to);
-  renderProdutos(from, to);
+  renderProdutos(from, to, pFrom, pTo);
   renderBookings(from, to);
   renderPaises(from, to);
   renderVendedores(from, to);
@@ -1812,21 +1815,37 @@ function renderCampanhas(from, to) {
   });
 }
 
-function renderProdutos(from, to) {
-  const bk = BOOKINGS.filter(b => b.d >= from && b.d <= to);
-  const prods = {};
-  for (const b of bk) {
-    if (!prods[b.p]) prods[b.p] = {o:0, conf:0, rec:0};
-    prods[b.p].o++;
-    prods[b.p].rec += b.v;
-    if (b.s === 'CONFIRMED') prods[b.p].conf++;
-  }
-  const lista = Object.entries(prods).sort((a,b)=>b[1].rec-a[1].rec);
+function renderProdutos(from, to, pFrom, pTo) {
+  // Reservas confirmadas por produto, pela data da reserva: período atual × período anterior
+  const agrupar = (ini, fim) => {
+    const r = {};
+    if (!ini || !fim) return r;
+    for (const b of BOOKINGS) {
+      if (b.d < ini || b.d > fim || b.s !== 'CONFIRMED') continue;
+      const p = r[b.p] ||= {conf:0, rec:0};
+      p.conf++; p.rec += b.v;
+    }
+    return r;
+  };
+  const prods = agrupar(from, to), ant = agrupar(pFrom, pTo);
+  const vazio = {conf:0, rec:0};
+  const nomes = [...new Set([...Object.keys(prods), ...Object.keys(ant)])]
+    .sort((a, b) => (prods[b]||vazio).rec - (prods[a]||vazio).rec || (ant[b]||vazio).rec - (ant[a]||vazio).rec);
+  const fdm = s => s ? s.slice(8,10) + '/' + s.slice(5,7) + '/' + s.slice(2,4) : '';
+  setText('prod-periodos', pFrom ? `· ${fdm(from)}–${fdm(to)} vs ${fdm(pFrom)}–${fdm(pTo)} (confirmadas, pela data da reserva)` : '');
+  const tk = p => p.conf ? p.rec / p.conf : 0;
+  const varTd = (cur, prev) => `<td style="text-align:right;font-size:.75rem;white-space:nowrap">${prev ? fDelta(cur, prev).replace(' vs ant.', '') : (cur ? '<span style="color:var(--sub)">novo</span>' : '—')}</td>`;
+  const sub = 'text-align:right;color:var(--sub)';
+  const linha = (nome, p, a, negrito) => `<tr${negrito ? ' style="font-weight:700;border-top:2px solid var(--border)"' : ''}><td style="font-weight:${negrito ? 700 : 500}">${nome}</td>`
+    + `<td style="text-align:right"><span class="badge badge-green">${p.conf}</span></td><td style="${sub}">${a.conf}</td>${varTd(p.conf, a.conf)}`
+    + `<td style="text-align:right;color:#22c55e">${fBRL(p.rec)}</td><td style="${sub}">${fBRL(a.rec)}</td>${varTd(p.rec, a.rec)}`
+    + `<td style="text-align:right">${p.conf ? fBRL(tk(p)) : '—'}</td>${p.conf ? varTd(tk(p), tk(a)) : '<td style="text-align:right">—</td>'}</tr>`;
+  const soma = o => Object.values(o).reduce((s, p) => ({conf: s.conf + p.conf, rec: s.rec + p.rec}), {conf:0, rec:0});
   const tbody = document.getElementById('prod-body');
-  if (tbody) tbody.innerHTML = lista.map(([nome,p])=>{
-    const tx = p.o ? (p.conf/p.o*100).toFixed(1) : 0;
-    return `<tr><td style="font-weight:500">${nome}</td><td style="text-align:right">${p.o}</td><td style="text-align:right"><span class="badge badge-green">${p.conf}</span></td><td style="text-align:right;color:#22c55e">${fBRL(p.rec)}</td><td style="text-align:right">${tx}%</td></tr>`;
-  }).join('');
+  if (tbody) tbody.innerHTML = nomes.length
+    ? nomes.map(n => linha(n, prods[n]||vazio, ant[n]||vazio)).join('') + linha('Total', soma(prods), soma(ant), true)
+    : '<tr><td colspan="9" style="color:var(--sub)">Nenhuma reserva confirmada no período.</td></tr>';
+  const lista = Object.entries(prods).sort((a,b)=>b[1].rec-a[1].rec);
 
   // Gráfico donut de produtos
   const top8 = lista.slice(0,8);
