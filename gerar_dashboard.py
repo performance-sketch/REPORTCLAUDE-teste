@@ -4512,6 +4512,22 @@ def _extrair_meta_do_html():
         return None, None, None
 
 
+def _extrair_var_do_html(var):
+    """Lê uma constante JSON (const VAR = ...;) do index.html publicado. None se não achar."""
+    import re
+    try:
+        with open(ARQUIVO_HTML, encoding="utf-8") as f:
+            src = f.read()
+        m = re.search(rf'const {var}\s*=\s*', src)
+        if not m:
+            return None
+        valor, _ = json.JSONDecoder().raw_decode(src[m.end():])
+        return valor
+    except Exception as e:
+        print(f"       AVISO: não foi possível extrair {var} do HTML: {e}")
+        return None
+
+
 def main():
     import sys
     rezdy_only = "--rezdy-only" in sys.argv
@@ -4527,42 +4543,53 @@ def main():
             sys.exit(1)
         print(f"       Meta carregado do HTML existente.")
     else:
-        print("[ 1/8 ] Meta Ads — resumo 30d (API)...")
-        d30 = buscar_meta_periodo("last_30d")
-        print(f"       Gasto R${d30['gasto']:,.2f} | CTR {d30['ctr']}% | Conv.Inic. {d30['conversas']}")
-
-        print("[ 2/8 ] Meta Ads — campanhas 30d...")
-        campanhas = buscar_meta_campanhas("last_30d")
-        print(f"       {len(campanhas)} campanhas")
-
-        print("[ 3/8 ] Meta Ads — diario conta 90d...")
-        diario = buscar_meta_diario(90)
-        print(f"       {len(diario)} dias")
-
-        print("[ 4/8 ] Meta Ads — diário por campanha 90d...")
-        camps_diario = buscar_meta_diario_campanhas(90)
-        print(f"       {len(camps_diario)} campanhas × 90d")
-
-        print("[ 5/8 ] Meta Ads — criativos 4 períodos (7d/14d/30d/90d)...")
-        criativos_d7  = buscar_meta_criativos("last_7d")
-        criativos_d14 = buscar_meta_criativos("last_14d")
-        criativos_d30 = buscar_meta_criativos("last_30d")
-        criativos_d90 = buscar_meta_criativos("last_90d")
-        criativos = {"d7": criativos_d7, "d14": criativos_d14, "d30": criativos_d30, "d90": criativos_d90}
-        print(f"       {len(criativos_d30)} criativos ativos (30d)")
         try:
-            links = buscar_links_anuncios({a["id"] for lista in criativos.values() for a in lista})
-            for lista in criativos.values():
-                for a in lista:
-                    a["link"] = links.get(a["id"])
-            print(f"       Links de destino: {len(links)} anúncios")
-        except Exception as e:
-            print(f"       AVISO links de destino: {e}")
+            print("[ 1/8 ] Meta Ads — resumo 30d (API)...")
+            d30 = buscar_meta_periodo("last_30d")
+            print(f"       Gasto R${d30['gasto']:,.2f} | CTR {d30['ctr']}% | Conv.Inic. {d30['conversas']}")
 
-        cupom_meta = buscar_meta_adsets_cupom("last_30d")
-        print(f"       Cupons Meta: carioquinha R${cupom_meta.get('CARIOQUINHA',0):,.2f} | voabrasil R${cupom_meta.get('VOABRASIL',0):,.2f}")
+            print("[ 2/8 ] Meta Ads — campanhas 30d...")
+            campanhas = buscar_meta_campanhas("last_30d")
+            print(f"       {len(campanhas)} campanhas")
 
-        meta = {"d30": d30, "campanhas": campanhas, "diario": diario}
+            print("[ 3/8 ] Meta Ads — diario conta 90d...")
+            diario = buscar_meta_diario(90)
+            print(f"       {len(diario)} dias")
+
+            print("[ 4/8 ] Meta Ads — diário por campanha 90d...")
+            camps_diario = buscar_meta_diario_campanhas(90)
+            print(f"       {len(camps_diario)} campanhas × 90d")
+
+            print("[ 5/8 ] Meta Ads — criativos 4 períodos (7d/14d/30d/90d)...")
+            criativos_d7  = buscar_meta_criativos("last_7d")
+            criativos_d14 = buscar_meta_criativos("last_14d")
+            criativos_d30 = buscar_meta_criativos("last_30d")
+            criativos_d90 = buscar_meta_criativos("last_90d")
+            criativos = {"d7": criativos_d7, "d14": criativos_d14, "d30": criativos_d30, "d90": criativos_d90}
+            print(f"       {len(criativos_d30)} criativos ativos (30d)")
+            try:
+                links = buscar_links_anuncios({a["id"] for lista in criativos.values() for a in lista})
+                for lista in criativos.values():
+                    for a in lista:
+                        a["link"] = links.get(a["id"])
+                print(f"       Links de destino: {len(links)} anúncios")
+            except Exception as e:
+                print(f"       AVISO links de destino: {e}")
+
+            cupom_meta = buscar_meta_adsets_cupom("last_30d")
+            print(f"       Cupons Meta: carioquinha R${cupom_meta.get('CARIOQUINHA',0):,.2f} | voabrasil R${cupom_meta.get('VOABRASIL',0):,.2f}")
+
+            meta = {"d30": d30, "campanhas": campanhas, "diario": diario}
+        except Exception as e_meta:
+            # Falha na API Meta (ex.: token expirado) não pode travar a atualização do Rezdy:
+            # reaproveita os dados Meta já publicados no index.html.
+            print(f"       AVISO Meta Ads indisponível ({type(e_meta).__name__}: {e_meta})")
+            print("       Reutilizando dados Meta do HTML atual; Rezdy segue atualizado.")
+            meta, camps_diario, criativos = _extrair_meta_do_html()
+            cupom_meta = {}
+            if not meta:
+                print("       ERRO: sem META_DATA no HTML para fallback.")
+                sys.exit(1)
 
     print("[ 6/8 ] Meta Orgânico + Instagram — descobrindo páginas e posts...")
     organico_fb, organico_ig, ig_dados = [], [], {}
@@ -4614,6 +4641,18 @@ def main():
         print(f"       @{username} | {seg:,} seguidores | {n_posts} posts")
     except Exception as e:
         print(f"       AVISO Instagram: {e}")
+
+    # Se o token Meta falhou, não apaga o orgânico/Instagram já publicados
+    if not organico_fb and not organico_ig:
+        _org_ant = _extrair_var_do_html("ORGANICO")
+        if _org_ant:
+            organico_fb = _org_ant
+            print(f"       Orgânico indisponível — reutilizando {len(_org_ant)} posts do HTML atual.")
+    if not (ig_dados or {}).get("media"):
+        _ig_ant = _extrair_var_do_html("IG_DATA")
+        if _ig_ant:
+            ig_dados = _ig_ant
+            print("       Instagram indisponível — reutilizando dados do HTML atual.")
 
     print(f"[ 8/8 ] Rezdy — reservas desde {REZDY_DESDE}...")
     reservas = buscar_rezdy_reservas()
