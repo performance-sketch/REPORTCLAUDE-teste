@@ -246,7 +246,8 @@
 
       <div class="cmp-sec"><div class="cmp-st">Fulfilments <span>· pela data do voo (Fulfilment Date) · ${vInt ? 'período inteiro, inclusive voos agendados' : `parcial · mesmos ${ef.B.dias} dias nos dois períodos`}</span></div>
         <div class="cmp-grid">
-          ${cartao('Voos realizados', a.voos.realizados, b.voos.realizados, x => num(x), 1, 'Reservas confirmadas com voo no período e antes de hoje', vInt)}
+          ${cartao('Total de voos', totVoos(a), totVoos(b), x => num(x), 1, 'Realizados + agendados no período — compara os mesmos dias mesmo quando hoje entra em um dos períodos', vInt)}
+          ${cartao('Voos realizados', a.voos.realizados, b.voos.realizados, x => num(x), 1, 'Reservas confirmadas com voo no período e antes de hoje (os voos de hoje contam como agendados)', vInt)}
           ${cartao('Voos agendados', a.voos.agendados, b.voos.agendados, x => num(x), 1, 'Reservas confirmadas com voo a partir de hoje até o fim do período', vInt)}
           ${cartao('PAX voando', a.voos.pax, b.voos.pax, x => num(x), 1, '', vInt)}
           ${cartao('PAX por booking', a.paxPorBooking, b.paxPorBooking, x => num(x, 2), 1, 'Pela data da reserva')}
