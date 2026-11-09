@@ -985,6 +985,15 @@ def processar_rezdy(reservas, dias=None):
 
 
 # ─── HTML ─────────────────────────────────────────────────────────────────────
+def _versao_arquivo(caminho):
+    """Hash curto do arquivo: muda a URL quando o JS muda e o navegador não usa cópia velha do cache."""
+    import hashlib
+    try:
+        return hashlib.md5(pathlib.Path(caminho).read_bytes()).hexdigest()[:8]
+    except OSError:
+        return datetime.now().strftime("%Y%m%d%H%M")
+
+
 def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organico_fb=None, organico_ig=None, cupom_meta=None, ig_dados=None):
     d30 = meta["d30"]
     rz  = rezdy_dados
@@ -4596,7 +4605,7 @@ function vrCopyAnnotationMsg(evt) {{
   else prepararTodos();
 }})();
 </script>
-<script src="comparacao.js"></script>
+<script src="comparacao.js?v={_versao_arquivo('comparacao.js')}"></script>
 </body>
 </html>"""
     return html
