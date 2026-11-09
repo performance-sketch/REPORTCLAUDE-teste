@@ -700,6 +700,26 @@ def buscar_rezdy_reservas(desde=REZDY_DESDE, limite_total=60000):
     return [b for b in todas if _utc_to_brt_date(b.get("dateCreated") or "") >= desde]
 
 
+def pais_cliente(b):
+    """(código ISO do país, origem). Origem "" = país informado na reserva;
+    "t" = deduzido pelo DDI do telefone (reservas internas costumam vir sem país)."""
+    cu = b.get("customer") or {}
+    cc = (cu.get("countryCode") or "").strip().upper()
+    if cc:
+        return cc, ""
+    tel = (cu.get("mobile") or cu.get("phone") or "").strip()
+    if tel:
+        try:
+            import phonenumbers
+            num = phonenumbers.parse(tel, "BR")   # sem "+": número nacional brasileiro
+            reg = phonenumbers.region_code_for_number(num)
+            if reg and reg != "ZZ":
+                return reg.upper(), "t"
+        except Exception:
+            pass
+    return "??", ""
+
+
 def processar_rezdy(reservas, dias=None):
     hoje      = datetime.now()
     hoje_str  = hoje.strftime("%Y-%m-%d")
@@ -805,7 +825,7 @@ def processar_rezdy(reservas, dias=None):
         produto = itens[0].get("productName", "-") if itens else "-"
         tour_dt = (itens[0].get("startTimeLocal") or "")[:10] if itens else ""
         pax     = sum(i.get("totalQuantity", 1) for i in itens) if itens else 1
-        cc      = (b.get("customer", {}).get("countryCode") or "??").upper()
+        cc, cc_origem = pais_cliente(b)
         criado_por = b.get("createdBy") or {}
         vendedor   = f"{criado_por.get('firstName', '')} {criado_por.get('lastName', '')}".strip()
         todos_bookings.append({
@@ -817,6 +837,7 @@ def processar_rezdy(reservas, dias=None):
             "t":  tour_dt,
             "f":  (b.get("source") or "ONLINE").upper(),
             "cc": cc,
+            **({"ccf": cc_origem} if cc_origem else {}),
             "px": pax,
             "nome": (b.get("customer") or {}).get("name", "-"),
             "vend": vendedor,
@@ -858,7 +879,7 @@ def processar_rezdy(reservas, dias=None):
         produto = itens[0].get("productName", "-") if itens else "-"
         tour_dt = (itens[0].get("startTimeLocal") or "")[:10] if itens else ""
         pax     = sum(i.get("totalQuantity", 1) for i in itens) if itens else 1
-        cc      = (b.get("customer", {}).get("countryCode") or "??").upper()
+        cc, cc_origem = pais_cliente(b)
         bookings_vendedor_extra.append({
             "n":  b.get("orderNumber", ""),
             "s":  b.get("status", ""),
@@ -868,6 +889,7 @@ def processar_rezdy(reservas, dias=None):
             "t":  tour_dt,
             "f":  (b.get("source") or "ONLINE").upper(),
             "cc": cc,
+            **({"ccf": cc_origem} if cc_origem else {}),
             "px": pax,
             "nome": (b.get("customer") or {}).get("name", "-"),
             "vend": vendedor,
@@ -1590,6 +1612,7 @@ def gerar_html(meta, rezdy_dados, camps_diario, criativos, atualizado_em, organi
           </tr></thead>
           <tbody id="paises-body"></tbody>
         </table>
+        <div id="paises-nota" style="font-size:.7rem;color:var(--sub);margin-top:10px"></div>
       </div>
     </div>
     <div class="card">
@@ -3315,9 +3338,10 @@ function countryName(cc) {{
 function renderPaises(from, to) {{
   const bk = BOOKINGS.filter(b => b.d >= from && b.d <= to && b.s === 'CONFIRMED');
   const paises = {{}};
-  let totalBookings = 0;
+  let totalBookings = 0, viaTel = 0;
   for (const b of bk) {{
     const cc = b.cc || '??';
+    if (b.ccf === 't') viaTel++;
     if (!paises[cc]) paises[cc] = {{ordens:0, pax:0, receita:0}};
     paises[cc].ordens++;
     paises[cc].pax += (b.px || 1);
@@ -3327,6 +3351,11 @@ function renderPaises(from, to) {{
   const sorted = Object.entries(paises).sort((a,b) => b[1].ordens - a[1].ordens).slice(0,20);
   const tbody = document.getElementById('paises-body');
   if (!tbody) return;
+  const nota = document.getElementById('paises-nota');
+  if (nota) {{
+    const desc = (paises['??'] || {{}}).ordens || 0, p = x => totalBookings ? (x / totalBookings * 100).toFixed(1) + '%' : '0%';
+    nota.innerHTML = `📞 ${{viaTel}} reservas (${{p(viaTel)}}) sem país no Rezdy tiveram o país deduzido pelo DDI do telefone · ❓ ${{desc}} (${{p(desc)}}) seguem sem país nem telefone válido.<br>Para zerar: ao lançar reserva interna, preencher o <b>País</b> do cliente no Rezdy (ou o telefone com +DDI).`;
+  }}
   tbody.innerHTML = sorted.map(([cc, v]) => {{
     const flag = countryFlag(cc);
     const pct  = totalBookings ? (v.ordens/totalBookings*100).toFixed(1) : '0.0';

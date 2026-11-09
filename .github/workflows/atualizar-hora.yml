@@ -28,7 +28,7 @@ jobs:
           python-version: '3.12'
 
       - name: Instalar dependências
-        run: pip install requests
+        run: pip install requests phonenumbers
 
       - name: Rezdy — períodos (analise-rezdy-periodos.html + data/periodos.json)
         env:

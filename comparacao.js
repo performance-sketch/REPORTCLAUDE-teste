@@ -91,7 +91,7 @@
     const conf = venda.filter(x => x[2] === 'C');
     const r = {pedidos: venda.length, status: {C: 0, A: 0, X: 0, H: 0, O: 0}, canal: {}, gateway: {}, naoRec: {FREE: 0, PROMO_CODE: 0, REFUND: 0},
       bookings: conf.length, pax: 0, bruta: 0, comissao: 0, foc: 0, focBookings: 0, focTotal: 0,
-      extras: {}, comExtra: 0, servicos: {noshow: [0, 0], fee: [0, 0], gift: [0, 0], outro: [0, 0]}};
+      extras: {}, comExtra: 0, focTipo: {}, servicos: {noshow: [0, 0], fee: [0, 0], gift: [0, 0], outro: [0, 0]}};
     Object.keys(CANAIS).forEach(c => { r.canal[c] = {pedidos: 0, abandonos: 0, bookings: 0, receita: 0, pax: 0, foc: 0, focBookings: 0, focTotal: 0}; });
     venda.forEach(x => {
       r.status[x[2]] = (r.status[x[2]] || 0) + 1;
@@ -99,7 +99,8 @@
       c.pedidos++; if (x[2] === 'A') c.abandonos++;
     });
     conf.forEach(x => {
-      const [, , , c, v, com, pag, itens] = x;
+      const [, , , c, v, com, pag, itens, focT] = x;
+      Object.entries(focT || {}).forEach(([t, val]) => { const o = r.focTipo[t] ||= [0, 0]; o[0]++; o[1] += val; });
       r.bruta += v; r.comissao += com || 0;
       let paxB = 0, temExtra = false;
       itens.forEach(it => {
@@ -287,15 +288,18 @@
           linha('Cupons de desconto (PROMO_CODE)', a.naoRec.PROMO_CODE, b.naoRec.PROMO_CODE, brl0, -1) +
           linha('Estornos', a.naoRec.REFUND, b.naoRec.REFUND, brl0, -1),
           'FOC = pagamentos do tipo FREE no Rezdy (ex.: "Cortesia GoPro").')}
-        ${tabela('Free of Charge (FOC) por canal', Object.keys(CANAIS).filter(c => a.canal[c].bookings || b.canal[c].bookings).map(c => {
-          const fa = a.canal[c], fb = b.canal[c];
-          return linha(`${CANAIS[c]} · cortesias (FOC)`, fa.foc, fb.foc, brl0, -1) +
-            linha('↳ % da receita do canal', fa.receita ? fa.foc / fa.receita * 100 : null, fb.receita ? fb.foc / fb.receita * 100 : null, x => pct(x), -1, true) +
-            linha('↳ reservas com alguma cortesia', fa.focBookings, fb.focBookings, x => num(x), 0) +
-            linha('↳ % das reservas do canal', fa.bookings ? fa.focBookings / fa.bookings * 100 : null, fb.bookings ? fb.focBookings / fb.bookings * 100 : null, x => pct(x), -1, true) +
-            linha('↳ reservas 100% cortesia', fa.focTotal, fb.focTotal, x => num(x), 0) +
-            linha('↳ participação no FOC total', a.foc ? fa.foc / a.foc * 100 : null, b.foc ? fb.foc / b.foc * 100 : null, x => pct(x), 0, true);
-        }).join(''), 'Cortesias somadas pela data da reserva. "% da receita do canal" = FOC do canal ÷ receita bruta do canal.')}
+        ${(() => {
+          // FOC simplificado: o que foi dado (tipo da cortesia) e quanto custou, depois o total por canal
+          const tipos = [...new Set([...Object.keys(a.focTipo), ...Object.keys(b.focTipo)])]
+            .sort((x, y) => ((b.focTipo[y] || [0, 0])[1] + (a.focTipo[y] || [0, 0])[1]) - ((b.focTipo[x] || [0, 0])[1] + (a.focTipo[x] || [0, 0])[1]));
+          const q = (r, t) => (r.focTipo[t] || [0])[0];
+          const canais = Object.keys(CANAIS).filter(c => a.canal[c].foc || b.canal[c].foc);
+          return tabela('Free of Charge (FOC) — qual desconto e quanto',
+            (tipos.length ? tipos.map(t => linha(`${esc(t)} <span class="cmp-meta">(${num(q(a, t))}× · ${num(q(b, t))}×)</span>`, (a.focTipo[t] || [0, 0])[1], (b.focTipo[t] || [0, 0])[1], brl0, -1)).join('') : '<tr><td colspan="4">Nenhuma cortesia no período.</td></tr>') +
+            linha('<b>Total de cortesias</b>', a.foc, b.foc, brl0, -1) +
+            canais.map(c => linha(`↳ ${CANAIS[c]} <span class="cmp-meta">(${pct(a.canal[c].receita ? a.canal[c].foc / a.canal[c].receita * 100 : null)} · ${pct(b.canal[c].receita ? b.canal[c].foc / b.canal[c].receita * 100 : null)} da receita do canal)</span>`, a.canal[c].foc, b.canal[c].foc, brl0, -1)).join(''),
+            'Tipo deduzido do texto do pagamento FREE no Rezdy (ex.: "Cortesia de GoPro", "Desconto pra fechar"). Entre parênteses: nº de reservas em A · B. Pela data da reserva.');
+        })()}
         ${tabela('Fees e outros itens', [['noshow', 'No-Show Fees'], ['fee', 'Outras fees'], ['gift', 'Gift Cards'], ['outro', 'Outros serviços (ex.: shuttle)']]
           .filter(([k]) => a.servicos[k][0] || b.servicos[k][0]).map(([k, l]) =>
             linha(`${l} · quantidade`, a.servicos[k][0], b.servicos[k][0], x => num(x), 0) + linha(`${l} · receita`, a.servicos[k][1], b.servicos[k][1], brl0, 0)).join('') || '<tr><td colspan="4">Nenhum no período.</td></tr>')}

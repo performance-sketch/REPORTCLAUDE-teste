@@ -21,6 +21,7 @@ Formato de cada linha em "b":
                 não recebidos: FREE = cortesia/FOC, PROMO_CODE = cupom, REFUND = estorno
     itens: [[produto, data_do_voo, duracao_min, pax, [[extra, qtd, receita], ...], valor_do_item], ...]
            produto e extra são índices de "produtos" e "extras".
+    foc (opcional, índice 8): {tipo da cortesia: valor} — tipo deduzido do label do pagamento FREE.
 
 Variável de ambiente: REZDY_API_KEY (ou REZDY_KEY)
 """
@@ -115,6 +116,28 @@ def gateway_pagamento(p):
     return "OTHER"
 
 
+# Tipo da cortesia (pagamento FREE) pelo texto que o time escreve no label do Rezdy
+TIPOS_FOC = [
+    ("Collab / parceria",         r"collab|influenc|parceri|permuta"),
+    ("Cortesia GoPro",            r"go ?pro"),
+    ("Cortesia câmera 360",       r"360"),
+    ("Cortesia Shoe Selfie Pass", r"\bss?p\b|\bspp\b|shoe|selfie"),
+    ("Upgrade de voo",            r"upgrade"),
+    ("Desconto pra fechar venda", r"fechar|.ltima hora"),
+    ("Remarcação / alteração",    r"remarca|altera"),
+    ("Extras de cortesia",        r"extra"),
+    ("Desconto (% / outros)",     r"desconto|discount|off|%|privad"),
+]
+
+
+def tipo_cortesia(label):
+    lab = (label or "").lower()
+    for nome, rx in TIPOS_FOC:
+        if re.search(rx, lab):
+            return nome
+    return "Outras cortesias"
+
+
 def receita_extra(e):
     preco, qtd = float(e.get("price") or 0), int(e.get("quantity") or 0)
     # QUANTITY: preço por unidade; demais tipos: preço do extra inteiro
@@ -141,17 +164,24 @@ def main():
         if s != "C":
             linhas.append([n, d, s, c, v])
             continue
-        pag = {}
+        pag, foc = {}, {}
         for p in b.get("payments") or []:
             t = gateway_pagamento(p)
-            pag[t] = round(pag.get(t, 0) + abs(float(p.get("amount") or 0)), 2)
+            val = abs(float(p.get("amount") or 0))
+            pag[t] = round(pag.get(t, 0) + val, 2)
+            if t == "FREE":
+                k = tipo_cortesia(p.get("label"))
+                foc[k] = round(foc.get(k, 0) + val, 2)
         itens = []
         for it in b.get("items") or []:
             ex = [[idx(extras, e.get("name") or "?"), int(e.get("quantity") or 0), receita_extra(e)]
                   for e in it.get("extras") or [] if int(e.get("quantity") or 0) > 0]
             itens.append([idx(produtos, it.get("productName") or "?"), (it.get("startTimeLocal") or "")[:10],
                           duracao_min(it), pax_item(it), ex, round(float(it.get("amount") or it.get("subtotal") or 0), 2)])
-        linhas.append([n, d, s, c, v, round(float(b.get("commission") or 0), 2), pag, itens])
+        linha = [n, d, s, c, v, round(float(b.get("commission") or 0), 2), pag, itens]
+        if foc:
+            linha.append(foc)        # [8] cortesias por tipo: {tipo: valor}
+        linhas.append(linha)
 
     linhas.sort(key=lambda x: x[1])
     SAIDA.parent.mkdir(exist_ok=True)
