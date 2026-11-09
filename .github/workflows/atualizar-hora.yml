@@ -55,6 +55,7 @@ jobs:
             echo "Sem mudanças."
           else
             git commit -m "chore: atualização horária dos dados [skip ci]"
-            git pull --rebase origin main
+            # Se alguém publicou durante a execução, mantém os dados recém-gerados nos arquivos de dados
+            git pull --rebase -X theirs origin main
             git push
           fi

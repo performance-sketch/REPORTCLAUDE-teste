@@ -297,8 +297,14 @@
           return tabela('Free of Charge (FOC) — qual desconto e quanto',
             (tipos.length ? tipos.map(t => linha(`${esc(t)} <span class="cmp-meta">(${num(q(a, t))}× · ${num(q(b, t))}×)</span>`, (a.focTipo[t] || [0, 0])[1], (b.focTipo[t] || [0, 0])[1], brl0, -1)).join('') : '<tr><td colspan="4">Nenhuma cortesia no período.</td></tr>') +
             linha('<b>Total de cortesias</b>', a.foc, b.foc, brl0, -1) +
-            canais.map(c => linha(`↳ ${CANAIS[c]} <span class="cmp-meta">(${pct(a.canal[c].receita ? a.canal[c].foc / a.canal[c].receita * 100 : null)} · ${pct(b.canal[c].receita ? b.canal[c].foc / b.canal[c].receita * 100 : null)} da receita do canal)</span>`, a.canal[c].foc, b.canal[c].foc, brl0, -1)).join(''),
-            'Tipo deduzido do texto do pagamento FREE no Rezdy (ex.: "Cortesia de GoPro", "Desconto pra fechar"). Entre parênteses: nº de reservas em A · B. Pela data da reserva.');
+            canais.map(c => linha(`↳ ${CANAIS[c]} <span class="cmp-meta">(${pct(a.canal[c].receita ? a.canal[c].foc / a.canal[c].receita * 100 : null)} · ${pct(b.canal[c].receita ? b.canal[c].foc / b.canal[c].receita * 100 : null)} da receita do canal)</span>`, a.canal[c].foc, b.canal[c].foc, brl0, -1)).join('') +
+            // Números absolutos: quantas cortesias de cada tipo e quantas reservas
+            `<tr><td colspan="4" class="cmp-meta" style="padding-top:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Quantidade (números absolutos)</td></tr>` +
+            tipos.map(t => linha(esc(t), q(a, t), q(b, t), x => num(x), -1)).join('') +
+            linha('<b>Reservas com alguma cortesia</b>', a.focBookings, b.focBookings, x => num(x), -1) +
+            linha('↳ reservas 100% cortesia', a.focTotal, b.focTotal, x => num(x), -1) +
+            canais.map(c => linha(`↳ ${CANAIS[c]}`, a.canal[c].focBookings, b.canal[c].focBookings, x => num(x), -1)).join(''),
+            'Tipo deduzido do texto do pagamento FREE no Rezdy (ex.: "Cortesia de GoPro", "Desconto pra fechar"). Entre parênteses: nº de reservas em A · B. Pela data da reserva. Uma reserva pode ter mais de um tipo de cortesia.');
         })()}
         ${tabela('Fees e outros itens', [['noshow', 'No-Show Fees'], ['fee', 'Outras fees'], ['gift', 'Gift Cards'], ['outro', 'Outros serviços (ex.: shuttle)']]
           .filter(([k]) => a.servicos[k][0] || b.servicos[k][0]).map(([k, l]) =>
