@@ -1,4 +1,4 @@
-name: Atualizar dados (hora em hora)
+name: Atualizar dados Rezdy (hora em hora)
 
 on:
   schedule:
@@ -16,6 +16,9 @@ jobs:
     timeout-minutes: 40
     permissions:
       contents: write
+    env:
+      TZ: America/Sao_Paulo      # datas do dashboard em horário de Brasília
+      PYTHONIOENCODING: utf-8
 
     steps:
       - uses: actions/checkout@v4
@@ -30,22 +33,17 @@ jobs:
       - name: Rezdy — períodos (analise-rezdy-periodos.html + data/periodos.json)
         env:
           REZDY_API_KEY: ${{ secrets.REZDY_API_KEY }}
-          PYTHONIOENCODING: utf-8
         run: python scripts/update_rezdy_data.py
 
       - name: Rezdy — comparação de períodos (data/comparacao.json)
         env:
           REZDY_API_KEY: ${{ secrets.REZDY_API_KEY }}
-          PYTHONIOENCODING: utf-8
         run: python scripts/gerar_comparacao.py
 
-      - name: Dashboard completo (Meta Ads + Rezdy → index.html)
+      - name: Dashboard (Rezdy → index.html; Meta Ads reaproveitado do HTML atual)
         env:
-          META_TOKEN: ${{ secrets.META_TOKEN }}
-          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
           REZDY_KEY: ${{ secrets.REZDY_API_KEY }}
-          PYTHONIOENCODING: utf-8
-        run: python gerar_dashboard.py
+        run: python gerar_dashboard.py --rezdy-only
 
       - name: Commit e push se houve mudança
         run: |

@@ -35,10 +35,10 @@ def _load_env():
 _load_env()
 
 # ─── Credenciais ──────────────────────────────────────────────────────────────
-META_TOKEN      = os.environ["META_TOKEN"]
+META_TOKEN      = os.environ.get("META_TOKEN", "")   # opcional: sem token → modo --rezdy-only
 META_ACCOUNT    = os.environ.get("META_ACCOUNT", "act_2613909812239242")
 META_BASE       = "https://graph.facebook.com/v19.0"
-META_APP_SECRET = os.environ["META_APP_SECRET"]
+META_APP_SECRET = os.environ.get("META_APP_SECRET", "")
 REZDY_KEY       = os.environ["REZDY_KEY"]
 REZDY_BASE      = "https://api.rezdy.com/v1"
 ARQUIVO_HTML    = "index.html"
@@ -4612,7 +4612,8 @@ def _extrair_var_do_html(var):
 
 def main():
     import sys
-    rezdy_only = "--rezdy-only" in sys.argv
+    # Sem token Meta → trabalha só com a Rezdy (Meta, orgânico e Instagram vêm do HTML atual)
+    rezdy_only = "--rezdy-only" in sys.argv or not META_TOKEN
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
     print(f"\n=== Vertical Rio Dashboard — {agora} ===\n")
 
@@ -4673,56 +4674,59 @@ def main():
                 print("       ERRO: sem META_DATA no HTML para fallback.")
                 sys.exit(1)
 
-    print("[ 6/8 ] Meta Orgânico + Instagram — descobrindo páginas e posts...")
     organico_fb, organico_ig, ig_dados = [], [], {}
     _page_token_ig, _ig_id = META_TOKEN, IG_ACCOUNT_ID
-    try:
-        paginas = buscar_paginas()
-        if not paginas:
-            print("       Nenhuma página retornada — dados orgânicos não disponíveis.")
-        else:
-            page       = paginas[0]
-            page_id    = page["id"]
-            page_token = page.get("access_token", META_TOKEN)
-            ig_info    = page.get("instagram_business_account") or {}
-            ig_id_page = ig_info.get("id", "")
-            print(f"       Página: {page.get('name','?')} (id={page_id})")
-            if ig_id_page:
-                _page_token_ig = page_token
-                _ig_id         = ig_id_page
-            try:
-                organico_fb = buscar_organico_facebook(page_id, page_token, 90)
-                print(f"       {len(organico_fb)} posts Facebook")
-            except Exception as e_fb:
-                print(f"       AVISO Facebook orgânico: {e_fb}")
-            stories_fb = buscar_stories_facebook(page_id, page_token)
-            if stories_fb:
-                print(f"       {len(stories_fb)} stories Facebook ativas")
-                organico_fb += stories_fb
-            if ig_id_page:
-                try:
-                    organico_ig = buscar_organico_instagram(ig_id_page, 90)
-                    print(f"       {len(organico_ig)} posts Instagram (orgânico)")
-                except Exception as e_ig:
-                    print(f"       AVISO Instagram orgânico: {type(e_ig).__name__}")
-                stories_ig = buscar_stories_instagram(ig_id_page)
-                if stories_ig:
-                    print(f"       {len(stories_ig)} stories Instagram ativas")
-                    organico_ig += stories_ig
-            else:
-                print("       Instagram Business Account não encontrado na página.")
-    except Exception as e:
-        print(f"       AVISO geral orgânico: {e}")
+    if rezdy_only:
+        print("[ 6-7 ] Orgânico + Instagram: pulado (--rezdy-only), reutilizando do HTML atual.")
+    else:
+      print("[ 6/8 ] Meta Orgânico + Instagram — descobrindo páginas e posts...")
+      try:
+          paginas = buscar_paginas()
+          if not paginas:
+              print("       Nenhuma página retornada — dados orgânicos não disponíveis.")
+          else:
+              page       = paginas[0]
+              page_id    = page["id"]
+              page_token = page.get("access_token", META_TOKEN)
+              ig_info    = page.get("instagram_business_account") or {}
+              ig_id_page = ig_info.get("id", "")
+              print(f"       Página: {page.get('name','?')} (id={page_id})")
+              if ig_id_page:
+                  _page_token_ig = page_token
+                  _ig_id         = ig_id_page
+              try:
+                  organico_fb = buscar_organico_facebook(page_id, page_token, 90)
+                  print(f"       {len(organico_fb)} posts Facebook")
+              except Exception as e_fb:
+                  print(f"       AVISO Facebook orgânico: {e_fb}")
+              stories_fb = buscar_stories_facebook(page_id, page_token)
+              if stories_fb:
+                  print(f"       {len(stories_fb)} stories Facebook ativas")
+                  organico_fb += stories_fb
+              if ig_id_page:
+                  try:
+                      organico_ig = buscar_organico_instagram(ig_id_page, 90)
+                      print(f"       {len(organico_ig)} posts Instagram (orgânico)")
+                  except Exception as e_ig:
+                      print(f"       AVISO Instagram orgânico: {type(e_ig).__name__}")
+                  stories_ig = buscar_stories_instagram(ig_id_page)
+                  if stories_ig:
+                      print(f"       {len(stories_ig)} stories Instagram ativas")
+                      organico_ig += stories_ig
+              else:
+                  print("       Instagram Business Account não encontrado na página.")
+      except Exception as e:
+          print(f"       AVISO geral orgânico: {e}")
 
-    print("[ 7/8 ] Instagram — perfil e posts (page token)...")
-    try:
-        ig_dados = buscar_instagram_dados(_ig_id, page_token=_page_token_ig, dias=180)
-        n_posts  = len(ig_dados.get("media", []))
-        seg      = ig_dados.get("perfil", {}).get("followers_count", 0)
-        username = ig_dados.get("perfil", {}).get("username", "?")
-        print(f"       @{username} | {seg:,} seguidores | {n_posts} posts")
-    except Exception as e:
-        print(f"       AVISO Instagram: {e}")
+      print("[ 7/8 ] Instagram — perfil e posts (page token)...")
+      try:
+          ig_dados = buscar_instagram_dados(_ig_id, page_token=_page_token_ig, dias=180)
+          n_posts  = len(ig_dados.get("media", []))
+          seg      = ig_dados.get("perfil", {}).get("followers_count", 0)
+          username = ig_dados.get("perfil", {}).get("username", "?")
+          print(f"       @{username} | {seg:,} seguidores | {n_posts} posts")
+      except Exception as e:
+          print(f"       AVISO Instagram: {e}")
 
     # Se o token Meta falhou, não apaga o orgânico/Instagram já publicados
     if not organico_fb and not organico_ig:
