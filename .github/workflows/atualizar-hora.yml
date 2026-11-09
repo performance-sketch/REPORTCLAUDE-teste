@@ -1,0 +1,62 @@
+name: Atualizar dados (hora em hora)
+
+on:
+  schedule:
+    # Todo começo de hora (UTC). O GitHub pode atrasar alguns minutos.
+    - cron: '7 * * * *'
+  workflow_dispatch:   # botão "Run workflow" na aba Actions
+
+concurrency:
+  group: atualizar-dados
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependências
+        run: pip install requests
+
+      - name: Rezdy — períodos (analise-rezdy-periodos.html + data/periodos.json)
+        env:
+          REZDY_API_KEY: ${{ secrets.REZDY_API_KEY }}
+          PYTHONIOENCODING: utf-8
+        run: python scripts/update_rezdy_data.py
+
+      - name: Rezdy — comparação de períodos (data/comparacao.json)
+        env:
+          REZDY_API_KEY: ${{ secrets.REZDY_API_KEY }}
+          PYTHONIOENCODING: utf-8
+        run: python scripts/gerar_comparacao.py
+
+      - name: Dashboard completo (Meta Ads + Rezdy → index.html)
+        env:
+          META_TOKEN: ${{ secrets.META_TOKEN }}
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+          REZDY_KEY: ${{ secrets.REZDY_API_KEY }}
+          PYTHONIOENCODING: utf-8
+        run: python gerar_dashboard.py
+
+      - name: Commit e push se houve mudança
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          FILES="index.html analise-rezdy-periodos.html data/periodos.json data/comparacao.json"
+          git add $FILES
+          if git diff --cached --quiet; then
+            echo "Sem mudanças."
+          else
+            git commit -m "chore: atualização horária dos dados [skip ci]"
+            git pull --rebase origin main
+            git push
+          fi
